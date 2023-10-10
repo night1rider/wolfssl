@@ -1,0 +1,41 @@
+#!/bin/bash
+export WORKING_DIR="$(pwd)"
+
+export GNU_ARM_TOOLCHAIN_DIR="arm-gnu-toolchain-12.3.rel1-x86_64-arm-none-eabi"
+export GNU_ARM_TOOLCHAIN_TARGZ="${GNU_ARM_TOOLCHAIN_DIR}.tar.xz"
+export GNU_ARM_TOOLCHAIN_WGET="https://developer.arm.com/-/media/Files/downloads/gnu/12.3.rel1/binrel/${GNU_ARM_TOOLCHAIN_TARGZ}"
+
+export CMSIS_TOOLBOX_DIR="cmsis-toolbox-linux-amd64"
+export CMSIS_TOOLBOX_TARGZ="${CMSIS_TOOLBOX_DIR}.tar.gz"
+export CMSIS_TOOLBOX_WGET="https://github.com/Open-CMSIS-Pack/cmsis-toolbox/releases/download/2.1.0/${CMSIS_TOOLBOX_TARGZ}"
+
+if [ -e ${GNU_ARM_TOOLCHAIN_DIR} ]; then
+	echo "${GNU_ARM_TOOLCHAIN_DIR} already exists"
+else
+	wget $GNU_ARM_TOOLCHAIN_WGET
+	tar -xf $GNU_ARM_TOOLCHAIN_TARGZ
+	rm -f $GNU_ARM_TOOLCHAIN_TARGZ
+fi 
+
+if [ -e ${CMSIS_TOOLBOX_DIR} ]; then
+	echo "${CMSIS_TOOLBOX_DIR} already exists"
+else
+	wget $CMSIS_TOOLBOX_WGET
+	tar -xf $CMSIS_TOOLBOX_TARGZ
+	rm -f $CMSIS_TOOLBOX_TARGZ
+fi
+
+
+if [ -e packs ]; then
+	echo "packs already exists"
+else
+	mkdir packs
+fi
+
+export GCC_TOOLCHAIN_12_3_1="${WORKING_DIR}/${GNU_ARM_TOOLCHAIN_DIR}/bin"
+export CMSIS_PACK_ROOT="${WORKING_DIR}/packs"
+export CMSIS_COMPILER_ROOT="${WORKING_DIR}/${CMSIS_TOOLBOX_DIR}/etc"
+export PATH="${WORKING_DIR}/${CMSIS_TOOLBOX_DIR}/bin:$PATH"
+cpackget init https://www.keil.com/pack/index.pidx
+
+

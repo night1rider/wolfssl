@@ -1,0 +1,34 @@
+solution:
+# A solution is a collection of related projects that share same base configration
+
+  created-for: CMSIS-Toolbox@2.0.0
+  cdefault:                 # use cdefault.yml for default toolchain settings
+  compiler: GCC             # uncomment to select a different compiler (AC6 or IAR)
+
+# List the packs that define the device and/or board
+  packs:
+    - pack: ARM::CMSIS
+    - pack: NXP::MK82F25615_DFP@12.2.0    # replace with matching device family pack (DFP) for the device
+    - pack: NXP::FRDM-K82F_BSP@12.2.0     # add a board support pack (BSP) when using a board
+
+# List different hardware targets that are used to deploy the solution
+  target-types:
+    - type: MCU    # choose a brief name for your target hardware
+      device: MK82FN256VLL15  # replace with your device or comment out to use a board
+
+        #    - type: DEV-Board
+        #board:  FRDM-K82F   # optional specify you board (device selected by a board)
+
+# List different build types
+  build-types:
+    - type: Debug
+      debug: on
+      optimize: none
+
+    - type: Release
+      debug: off
+      optimize: balanced
+
+# List related projects
+  projects:
+    - project: ./K82F.cproject.yml
