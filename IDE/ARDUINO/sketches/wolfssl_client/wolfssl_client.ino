@@ -57,7 +57,7 @@ void setup() {
   }
   /* initialize wolfSSL using callback functions */
   wolfSSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, 0);
-	 int rc = wolfSSL_CTX_load_verify_buffer(ctx, ca_cert_der_2048[], sizeof_ca_cert_der_2048, WOLFSSL_FILETYPE_ASN1);
+	 int rc = wolfSSL_CTX_load_verify_buffer(ctx, ca_cert_der_2048, sizeof_ca_cert_der_2048, WOLFSSL_FILETYPE_ASN1);
 	 Serial.print("\n\n Return code of load_verify is:");
 	 Serial.println(rc);
 	 Serial.println("");
