@@ -37,7 +37,7 @@ if [ "$DIR" = "ARDUINO" ]; then
     if [ ! -d "./wolfSSL/src" ]; then
 	mkdir ./wolfSSL/src
     fi
-    mv ./wolfSSL/ssl_misc.c ./wolfSSL/src/ssl_misc.c
+    cp ../../src/*.c ./wolfSSL/src/
 
     # put bio and evp as includes
     mv ./wolfSSL/bio.c ./wolfSSL/wolfssl
