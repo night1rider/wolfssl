@@ -20,11 +20,12 @@
  */
 
 
+#define USE_CERT_BUFFERS_2048
 #include <wolfssl.h>
 #include <wolfssl/ssl.h>
 #include <Ethernet.h>
 #include <wolfssl/certs_test.h>
-#define USE_CERT_BUFFERS_2048
+
 
 const char host[] = "192.168.1.148"; /* server to connect to */
 const int port = 11111; /* port on server to connect to */
@@ -56,7 +57,7 @@ void setup() {
   }
   /* initialize wolfSSL using callback functions */
   wolfSSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, 0);
-	 int rc = wolfSSL_CTX_load_verify_buffer(ctx, ca_cert_der_2048, sizeof_ca_cert_der_2048, WOLFSSL_FILETYPE_ASN1);
+	 int rc = wolfSSL_CTX_load_verify_buffer(ctx, ca_cert_der_2048[], sizeof_ca_cert_der_2048, WOLFSSL_FILETYPE_ASN1);
 	 Serial.print("\n\n Return code of load_verify is:");
 	 Serial.println(rc);
 	 Serial.println("");
