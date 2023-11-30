@@ -8386,7 +8386,7 @@ static int TLSX_KeyShare_ProcessPqc(WOLFSSL* ssl, KeyShareEntry* keyShareEntry)
         XMEMCPY(ssl->arrays->preMasterSecret, keyShareEntry->ke,
                 keyShareEntry->keLen);
         ssl->arrays->preMasterSz = keyShareEntry->keLen;
-        XFREE(keyShareEntry->ke, sl->heap, DYNAMIC_TYPE_SECRET)
+        XFREE(keyShareEntry->ke, ssl->heap, DYNAMIC_TYPE_SECRET)
         keyShareEntry->ke = NULL;
         keyShareEntry->keLen = 0;
         return 0;
@@ -12091,7 +12091,7 @@ void TLSX_FreeAll(TLSX* list, void* heap)
 
     #ifdef WOLFSSL_SEND_HRR_COOKIE
             case TLSX_COOKIE:
-                WOLFSSL_MSG("Cookie extension freee");
+                WOLFSSL_MSG("Cookie extension free");
                 CKE_FREE_ALL((Cookie*)extension->data, heap);
                 break;
     #endif
