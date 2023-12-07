@@ -60499,7 +60499,8 @@ static int test_wolfSSL_dtls_set_mtu(void)
 {
     EXPECT_DECLS;
 #if (defined(WOLFSSL_DTLS_MTU) || defined(WOLFSSL_SCTP)) && \
-    !defined(NO_WOLFSSL_SERVER) && defined(WOLFSSL_DTLS)
+    !defined(NO_WOLFSSL_SERVER) && defined(WOLFSSL_DTLS) && \
+    !defined(WOLFSSL_NO_TLS12)
     WOLFSSL_CTX* ctx = NULL;
     WOLFSSL*     ssl = NULL;
     const char* testCertFile;
@@ -60537,7 +60538,7 @@ static int test_wolfSSL_dtls_set_mtu(void)
 }
 
 #if defined(HAVE_IO_TESTS_DEPENDENCIES) && !defined(SINGLE_THREADED) && \
-    defined(WOLFSSL_DTLS)
+    defined(WOLFSSL_DTLS) && !defined(WOLFSSL_NO_TLS12)
 
 static WC_INLINE void generateDTLSMsg(byte* out, int outSz, word32 seq,
         enum HandShakeType hsType, word16 length)
@@ -60657,7 +60658,7 @@ static int test_wolfSSL_dtls_plaintext(void) {
 #endif
 
 #if defined(HAVE_IO_TESTS_DEPENDENCIES) && !defined(SINGLE_THREADED) && \
-    defined(WOLFSSL_DTLS)
+    defined(WOLFSSL_DTLS) && !defined(WOLFSSL_NO_TLS12)
 
 static void test_wolfSSL_dtls12_fragments_spammer(WOLFSSL* ssl)
 {
@@ -60778,8 +60779,10 @@ static int test_wolfSSL_dtls_fragments(void)
         method_provider server_meth;
         ssl_callback spammer;
     } params[] = {
+#if !defined(WOLFSSL_NO_TLS12)
         {wolfDTLSv1_2_client_method, wolfDTLSv1_2_server_method,
                 test_wolfSSL_dtls12_fragments_spammer},
+#endif
 #ifdef WOLFSSL_DTLS13
         {wolfDTLSv1_3_client_method, wolfDTLSv1_3_server_method,
                 test_wolfSSL_dtls13_fragments_spammer},
@@ -60844,10 +60847,15 @@ static int _test_wolfSSL_ignore_alert_before_cookie(byte version12)
     XMEMSET(&server_cbs, 0, sizeof(server_cbs));
     client_cbs.doUdp = server_cbs.doUdp = 1;
     if (version12) {
+#if !defined(WOLFSSL_NO_TLS12)
         client_cbs.method = wolfDTLSv1_2_client_method;
         server_cbs.method = wolfDTLSv1_2_server_method;
+#else
+        return TEST_SKIPPED;
+#endif
     }
-    else {
+    else
+    {
 #ifdef WOLFSSL_DTLS13
         client_cbs.method = wolfDTLSv1_3_client_method;
         server_cbs.method = wolfDTLSv1_3_server_method;
@@ -60940,17 +60948,18 @@ static int _test_wolfSSL_dtls_bad_record(
 
 static int test_wolfSSL_dtls_bad_record(void)
 {
-    int ret;
+    int ret = TEST_SUCCESS;
+#if !defined(WOLFSSL_NO_TLS12)
     ret = _test_wolfSSL_dtls_bad_record(wolfDTLSv1_2_client_method,
         wolfDTLSv1_2_server_method);
+#endif
 #ifdef WOLFSSL_DTLS13
-    if (ret != TEST_SUCCESS)
-        return ret;
-    return _test_wolfSSL_dtls_bad_record(wolfDTLSv1_3_client_method,
+    if (ret == TEST_SUCCESS) {
+        ret = _test_wolfSSL_dtls_bad_record(wolfDTLSv1_3_client_method,
         wolfDTLSv1_3_server_method);
-#else
-    return ret;
+    }
 #endif /* WOLFSSL_DTLS13 */
+    return ret;
 
 }
 
@@ -61435,8 +61444,10 @@ static int test_wolfSSL_dtls_stateless(void)
         ssl_callback client_ssl_ready;
         ssl_callback server_ssl_ready;
     } test_params[] = {
+#if !defined(WOLFSSL_NO_TLS12)
         {wolfDTLSv1_2_client_method, wolfDTLSv1_2_server_method,
                 test_wolfSSL_dtls_send_ch, test_wolfSSL_dtls_compare_stateless},
+#endif
 #if defined(WOLFSSL_DTLS13) && defined(WOLFSSL_SEND_HRR_COOKIE)
         {wolfDTLSv1_3_client_method, wolfDTLSv1_3_server_method,
                 test_wolfSSL_dtls_send_ch, test_wolfSSL_dtls_enable_hrrcookie},
@@ -61444,6 +61455,10 @@ static int test_wolfSSL_dtls_stateless(void)
                 test_wolfSSL_dtls_send_ch_with_invalid_cookie, test_wolfSSL_dtls_enable_hrrcookie},
 #endif
     };
+
+    if (0 == sizeof(test_params)){
+        return TEST_SKIPPED;
+    }
 
     for (i = 0; i < sizeof(test_params)/sizeof(*test_params); i++) {
         XMEMSET(&client_cbs, 0, sizeof(client_cbs));
@@ -66686,7 +66701,7 @@ static int test_dtls_msg_from_other_peer(void)
         *  !defined(SINGLE_THREADED) && !defined(NO_RSA) */
 #if defined(WOLFSSL_DTLS) && !defined(WOLFSSL_IPV6) &&               \
     !defined(NO_WOLFSSL_CLIENT) && !defined(NO_WOLFSSL_SERVER) &&   \
-    defined(HAVE_IO_TESTS_DEPENDENCIES)
+    defined(HAVE_IO_TESTS_DEPENDENCIES) && !defined(WOLFSSL_NO_TLS12)
 static int test_dtls_ipv6_check(void)
 {
     EXPECT_DECLS;
@@ -66836,7 +66851,8 @@ static int test_wolfSSL_configure_args(void)
 static int test_dtls_no_extensions(void)
 {
     EXPECT_DECLS;
-#if defined(WOLFSSL_DTLS) && defined(HAVE_MANUAL_MEMIO_TESTS_DEPENDENCIES)
+#if defined(WOLFSSL_DTLS) && defined(HAVE_MANUAL_MEMIO_TESTS_DEPENDENCIES) && \
+    !defined(WOLFSSL_NO_TLS12)
     WOLFSSL *ssl_s = NULL;
     WOLFSSL_CTX *ctx_s = NULL;
     struct test_memio_ctx test_ctx;
@@ -67317,7 +67333,9 @@ static int test_dtls_downgrade_scr(void)
 }
 #endif
 
-#if defined(HAVE_MANUAL_MEMIO_TESTS_DEPENDENCIES) && defined(WOLFSSL_DTLS13)
+#if defined(HAVE_MANUAL_MEMIO_TESTS_DEPENDENCIES) && defined(WOLFSSL_DTLS13) \
+    && !defined(WOLFSSL_NO_TLS12)
+
 static int test_dtls_client_hello_timeout_downgrade_read_cb(WOLFSSL *ssl,
         char *data, int sz, void *ctx)
 {
@@ -67344,7 +67362,9 @@ static int test_dtls_client_hello_timeout_downgrade_read_cb(WOLFSSL *ssl,
 static int test_dtls_client_hello_timeout_downgrade(void)
 {
     EXPECT_DECLS;
-#if defined(HAVE_MANUAL_MEMIO_TESTS_DEPENDENCIES) && defined(WOLFSSL_DTLS13)
+#if defined(HAVE_MANUAL_MEMIO_TESTS_DEPENDENCIES) && defined(WOLFSSL_DTLS13) \
+    && !defined(WOLFSSL_NO_TLS12)
+
     WOLFSSL_CTX *ctx_c = NULL;
     WOLFSSL_CTX *ctx_s = NULL;
     WOLFSSL *ssl_c = NULL;
@@ -67552,7 +67572,9 @@ static int test_dtls_client_hello_timeout(void)
 static int test_dtls_dropped_ccs(void)
 {
     EXPECT_DECLS;
-#if defined(HAVE_MANUAL_MEMIO_TESTS_DEPENDENCIES) && defined(WOLFSSL_DTLS)
+#if defined(HAVE_MANUAL_MEMIO_TESTS_DEPENDENCIES) && defined(WOLFSSL_DTLS) \
+    && !defined(WOLFSSL_NO_TLS12)
+
     WOLFSSL_CTX *ctx_c = NULL;
     WOLFSSL_CTX *ctx_s = NULL;
     WOLFSSL *ssl_c = NULL;
@@ -68126,6 +68148,7 @@ static int test_dtls13_early_data(void)
     char msg[] = "This is early data";
     char msg2[] = "This is client data";
     char msg3[] = "This is server data";
+    char msg4[] = "This is server immediate data";
     char msgBuf[50];
 
     XMEMSET(&test_ctx, 0, sizeof(test_ctx));
@@ -68153,6 +68176,7 @@ static int test_dtls13_early_data(void)
     ExpectIntEQ(wolfSSL_disable_hrr_cookie(ssl_s), WOLFSSL_SUCCESS);
 #endif
 
+    /* Test 0-RTT data */
     ExpectIntEQ(wolfSSL_write_early_data(ssl_c, msg, sizeof(msg),
             &written), sizeof(msg));
     ExpectIntEQ(written, sizeof(msg));
@@ -68161,6 +68185,15 @@ static int test_dtls13_early_data(void)
             &read), sizeof(msg));
     ExpectIntEQ(read, sizeof(msg));
     ExpectStrEQ(msg, msgBuf);
+
+    /* Test 0.5-RTT data */
+    ExpectIntEQ(wolfSSL_write(ssl_s, msg4, sizeof(msg4)), sizeof(msg4));
+
+    ExpectIntEQ(wolfSSL_connect(ssl_c), -1);
+    ExpectIntEQ(wolfSSL_get_error(ssl_c, -1), APP_DATA_READY);
+
+    ExpectIntEQ(wolfSSL_read(ssl_c, msgBuf, sizeof(msgBuf)), sizeof(msg4));
+    ExpectStrEQ(msg4, msgBuf);
 
     /* Complete handshake */
     ExpectIntEQ(wolfSSL_connect(ssl_c), -1);
@@ -68173,10 +68206,13 @@ static int test_dtls13_early_data(void)
      * parsing logic. */
     ExpectFalse(wolfSSL_is_init_finished(ssl_s));
     ExpectIntEQ(wolfSSL_read_early_data(ssl_s, msgBuf, sizeof(msgBuf),
-            &read), WOLFSSL_FAILURE);
-    ExpectTrue(wolfSSL_is_init_finished(ssl_s));
+            &read), -1);
+    ExpectIntEQ(wolfSSL_get_error(ssl_s, -1), WOLFSSL_ERROR_WANT_READ);
 
     ExpectIntEQ(wolfSSL_connect(ssl_c), WOLFSSL_SUCCESS);
+
+    ExpectTrue(wolfSSL_is_init_finished(ssl_s));
+
 
     /* Test bi-directional write */
     ExpectIntEQ(wolfSSL_write(ssl_c, msg2, sizeof(msg2)), sizeof(msg2));

@@ -8458,9 +8458,9 @@ void FreeHandshakeResources(WOLFSSL* ssl)
     }
 #endif /* HAVE_PK_CALLBACKS */
 
-#if defined(HAVE_TLS_EXTENSIONS) && !defined(HAVE_SNI) && !defined(NO_TLS) && \
-    !defined(HAVE_ALPN) && !defined(WOLFSSL_POST_HANDSHAKE_AUTH) && \
-    !defined(WOLFSSL_DTLS_CID)
+#if defined(HAVE_TLS_EXTENSIONS) && !defined(NO_TLS)
+#if !defined(HAVE_SNI) && !defined(HAVE_ALPN) && !defined(WOLFSSL_DTLS_CID) && \
+    !defined(WOLFSSL_POST_HANDSHAKE_AUTH)
     /* Some extensions need to be kept for post-handshake querying. */
     TLSX_FreeAll(ssl->extensions, ssl->heap);
     ssl->extensions = NULL;
@@ -8474,7 +8474,9 @@ void FreeHandshakeResources(WOLFSSL* ssl)
     TLSX_Remove(&ssl->extensions, TLSX_SUPPORTED_VERSIONS, ssl->heap);
     TLSX_Remove(&ssl->extensions, TLSX_KEY_SHARE, ssl->heap);
 #endif
-#endif
+#endif /* !HAVE_SNI && && !HAVE_ALPN && !WOLFSSL_DTLS_CID &&
+        * !WOLFSSL_POST_HANDSHAKE_AUTH */
+#endif /* HAVE_TLS_EXTENSIONS && !NO_TLS */
 
 #ifdef WOLFSSL_STATIC_MEMORY
     /* when done with handshake decrement current handshake count */
@@ -19607,7 +19609,8 @@ int DoApplicationData(WOLFSSL* ssl, byte* input, word32* inOutIdx, int sniff)
         return BUFFER_ERROR;
     }
 #ifdef WOLFSSL_EARLY_DATA
-    if (ssl->earlyData > early_data_ext) {
+    if (ssl->options.side == WOLFSSL_SERVER_END &&
+            ssl->earlyData > early_data_ext) {
         if (ssl->earlyDataSz + dataSz > ssl->options.maxEarlyDataSz) {
             if (sniff == NO_SNIFF) {
                 SendAlert(ssl, alert_fatal, unexpected_message);
@@ -19647,11 +19650,14 @@ int DoApplicationData(WOLFSSL* ssl, byte* input, word32* inOutIdx, int sniff)
 #endif
 
     *inOutIdx = idx;
+#ifdef WOLFSSL_DTLS13
+    if (ssl->options.connectState == WAIT_FINISHED_ACK) {
+        /* DTLS 1.3 is waiting for an ACK but we can still return app data. */
+        return APP_DATA_READY;
+    }
+#endif
 #ifdef HAVE_SECURE_RENEGOTIATION
     if (IsSCR(ssl)) {
-        /* Reset the processReply state since
-         * we finished processing this message. */
-        ssl->options.processReply = doProcessInit;
         /* If we are in a secure renegotiation then APP DATA is treated
          * differently */
         return APP_DATA_READY;
@@ -20244,7 +20250,7 @@ int ProcessReplyEx(WOLFSSL* ssl, int allowSocketErr)
 #endif
 
     if (ssl->error != 0 && ssl->error != WANT_READ && ssl->error != WANT_WRITE
-    #ifdef HAVE_SECURE_RENEGOTIATION
+    #if defined(HAVE_SECURE_RENEGOTIATION) || defined(WOLFSSL_DTLS13)
         && ssl->error != APP_DATA_READY
     #endif
     #ifdef WOLFSSL_ASYNC_CRYPT
@@ -20782,7 +20788,7 @@ default:
                             return HandleDTLSDecryptFailed(ssl);
                         }
                     #endif /* WOLFSSL_DTLS */
-                    #ifdef WOLFSSL_EXTRA_ALERTS
+                    #if defined(WOLFSSL_EXTRA_ALERTS) && !defined(WOLFSSL_NO_ETM_ALERT)
                         if (!ssl->options.dtls)
                             SendAlert(ssl, alert_fatal, bad_record_mac);
                     #endif
@@ -20877,7 +20883,7 @@ default:
 #endif
                                 ) {
                     WOLFSSL_MSG("Plaintext too long - Encrypt-Then-MAC");
-            #if defined(WOLFSSL_EXTRA_ALERTS)
+            #if defined(WOLFSSL_EXTRA_ALERTS) && !defined(WOLFSSL_NO_ETM_ALERT)
                     SendAlert(ssl, alert_fatal, record_overflow);
             #endif
                     WOLFSSL_ERROR_VERBOSE(BUFFER_ERROR);
@@ -21211,7 +21217,13 @@ default:
                                                 &ssl->buffers.inputBuffer.idx,
                                                               NO_SNIFF)) != 0) {
                         WOLFSSL_ERROR(ret);
-                        return ret;
+                    #if defined(WOLFSSL_DTLS13) || \
+                        defined(HAVE_SECURE_RENEGOTIATION)
+                        /* Not really an error. We will return after cleaning
+                         * up the processReply state. */
+                        if (ret != APP_DATA_READY)
+                    #endif
+                            return ret;
                     }
                     break;
 
@@ -21268,9 +21280,18 @@ default:
             /* input exhausted */
             if (ssl->buffers.inputBuffer.idx >= ssl->buffers.inputBuffer.length
 #ifdef WOLFSSL_DTLS
-                /* If app data was processed then return now to avoid
-                 * dropping any app data. */
-                || (ssl->options.dtls && ssl->curRL.type == application_data)
+                || (ssl->options.dtls &&
+                    /* If app data was processed then return now to avoid
+                     * dropping any app data. */
+                    (ssl->curRL.type == application_data ||
+                    /* client: if we processed a finished message, return to
+                     *         allow higher layers to establish the crypto
+                     *         parameters of the connection. The remaining data
+                     *         may be app data that we would drop without the
+                     *         crypto setup. */
+                    (ssl->options.side == WOLFSSL_CLIENT_END &&
+                        ssl->options.serverState == SERVER_FINISHED_COMPLETE &&
+                        ssl->options.handShakeState != HANDSHAKE_DONE)))
 #endif
                 ) {
                 /* Shrink input buffer when we successfully finish record
@@ -21324,6 +21345,11 @@ default:
              * (probably WC_PENDING_E) so return that so it can be handled
              * by higher layers. */
             if (ret != 0)
+                return ret;
+#endif
+#if defined(WOLFSSL_DTLS13) || defined(HAVE_SECURE_RENEGOTIATION)
+            /* Signal to user that we have application data ready to read */
+            if (ret == APP_DATA_READY)
                 return ret;
 #endif
             /* It is safe to shrink the input buffer here now. local vars will
@@ -23596,6 +23622,12 @@ int SendData(WOLFSSL* ssl, const void* data, int sz)
         groupMsgs = 1;
     #endif
     }
+    else if (IsAtLeastTLSv1_3(ssl->version) &&
+            ssl->options.side == WOLFSSL_SERVER_END &&
+            ssl->options.acceptState >= TLS13_ACCEPT_FINISHED_SENT) {
+        /* We can send data without waiting on peer finished msg */
+        WOLFSSL_MSG("server sending data before receiving client finished");
+    }
     else
 #endif
     if (ssl->options.handShakeState != HANDSHAKE_DONE && !IsSCR(ssl)) {
@@ -23833,7 +23865,7 @@ int ReceiveData(WOLFSSL* ssl, byte* output, int sz, int peek)
 #ifdef WOLFSSL_ASYNC_CRYPT
             && ssl->error != WC_PENDING_E
 #endif
-#ifdef HAVE_SECURE_RENEGOTIATION
+#if defined(HAVE_SECURE_RENEGOTIATION) || defined(WOLFSSL_DTLS13)
             && ssl->error != APP_DATA_READY
 #endif
     ) {
