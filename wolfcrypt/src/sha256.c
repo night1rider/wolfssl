@@ -89,7 +89,6 @@ on the specific device platform.
     #include <wolfssl/wolfcrypt/port/caam/wolfcaam_fsl_nxp.h>
 #endif
 
-
 /* determine if we are using Espressif SHA hardware acceleration */
 #undef WOLFSSL_USE_ESP32_CRYPT_HASH_HW
 #if defined(WOLFSSL_ESP32_CRYPT) && \
@@ -122,7 +121,8 @@ on the specific device platform.
 
 #elif defined(WOLFSSL_PSOC6_CRYPTO)
 
-
+#elif defined(WOLFSSL_MAX3266X) || defined(WOLFSSL_MAX3266X_OLD)
+    #include <wolfssl/wolfcrypt/port/maxim/max3266x.h>
 #else
 
 #include <wolfssl/wolfcrypt/logging.h>
@@ -288,7 +288,6 @@ static int InitSha256(wc_Sha256* sha256)
 #ifdef HAVE_ARIA
     sha256->hSession = NULL;
 #endif
-
     return 0;
 }
 #endif
@@ -2469,7 +2468,8 @@ int wc_Sha224_Grow(wc_Sha224* sha224, const byte* in, int inSz)
     /* implemented in wolfcrypt/src/port/psa/psa_hash.c */
 #elif defined(WOLFSSL_RENESAS_RX64_HASH)
     /* implemented in wolfcrypt/src/port/Renesas/renesas_rx64_hw_sha.c */
-
+#elif defined(MAX3266X_SHA)
+    /* Implemented in wolfcrypt/src/port/maxim/max3266x.c */
 #else
 
 int wc_Sha256GetHash(wc_Sha256* sha256, byte* hash)
