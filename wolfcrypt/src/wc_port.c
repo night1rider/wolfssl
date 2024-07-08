@@ -40,6 +40,10 @@
     #include <wolfssl/wolfcrypt/port/nxp/ksdk_port.h>
 #endif
 
+#if defined(WOLFSSL_MAX32665) || defined(WOLFSSL_MAX32666)
+    #include <wolfssl/wolfcrypt/port/maxim/max3266x.h>
+#endif
+
 #ifdef WOLFSSL_PSOC6_CRYPTO
     #include <wolfssl/wolfcrypt/port/cypress/psoc6_crypto.h>
 #endif
@@ -236,6 +240,14 @@ int wolfCrypt_Init(void)
         ret = ksdk_port_init();
         if (ret != 0) {
             WOLFSSL_MSG("KSDK port init failed");
+            return ret;
+        }
+    #endif
+
+    #if defined(WOLFSSL_MAX32665) || defined(WOLFSSL_MAX32666)
+        ret = wc_MXC_TPU_Init();
+        if (ret != 0){
+            WOLFSSL_MSG("MXC TPU port init failed");
             return ret;
         }
     #endif
@@ -450,6 +462,14 @@ int wolfCrypt_Cleanup(void)
 
     #ifdef WOLFSSL_SCE
         WOLFSSL_SCE_GSCE_HANDLE.p_api->close(WOLFSSL_SCE_GSCE_HANDLE.p_ctrl);
+    #endif
+
+    #if defined(WOLFSSL_MAX32665) || defined(WOLFSSL_MAX32666)
+        ret = wc_MXC_TPU_Shutdown();
+        if (ret != 0){
+            WOLFSSL_MSG("MXC TPU port init failed");
+            return ret;
+        }
     #endif
 
     #if defined(WOLFSSL_CAAM)

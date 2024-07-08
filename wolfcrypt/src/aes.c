@@ -82,6 +82,10 @@ block cipher mechanism that uses n-bit binary string parameter key with 128-bits
     #include <wolfssl/wolfcrypt/port/psa/psa.h>
 #endif
 
+#if defined(WOLFSSL_MAX32665) || defined(WOLFSSL_MAX32666)
+    #include <wolfssl/wolfcrypt/port/maxim/max3266x.h>
+#endif
+
 #if defined(WOLFSSL_TI_CRYPT)
     #include <wolfcrypt/src/port/ti/ti-aes.c>
 #else
@@ -4536,13 +4540,13 @@ static void AesSetKey_C(Aes* aes, const byte* key, word32 keySz, int dir)
             return ret;
         }
 #endif
-
         XMEMCPY(aes->key, userKey, keylen);
 
 #ifndef WC_AES_BITSLICED
     #if defined(LITTLE_ENDIAN_ORDER) && !defined(WOLFSSL_PIC32MZ_CRYPT) && \
         (!defined(WOLFSSL_ESP32_CRYPT) || \
-          defined(NO_WOLFSSL_ESP32_CRYPT_AES))
+          defined(NO_WOLFSSL_ESP32_CRYPT_AES)) && \
+          (!defined(WOLFSSL_MAX32665) && !defined(WOLFSSL_MAX32666))
 
         /* software */
         ByteReverseWords(aes->key, aes->key, keylen);
@@ -5372,6 +5376,150 @@ int wc_AesSetIV(Aes* aes, const byte* iv)
         return 0;
     }
     #endif /* HAVE_AES_DECRYPT */
+
+#elif defined(MAX3266X_AES)
+    #warning "Inside AES CBC Encrypt"
+
+    void print_hex(const char *label, const byte *data, size_t length) {
+    printf("%s: ", label);
+    for (size_t i = 0; i < length; ++i) {
+        if (data[i] >= 32 && data[i] <= 126) { // Printable range in ASCII
+            printf("%c", data[i]); // Print as ASCII character
+        } else {
+            printf("."); // Non-printable byte
+        }
+    }
+    printf("\n");
+    }
+
+    int wc_AesCbcEncrypt(Aes* aes, byte* out, const byte* in, word32 sz)
+    {
+        word32 keySize;
+        int status;
+        byte *iv, *enc_key;
+        word32 blocks = (sz / AES_BLOCK_SIZE);
+
+#ifdef WOLFSSL_AES_CBC_LENGTH_CHECKS
+        if (sz % AES_BLOCK_SIZE) {
+            return BAD_LENGTH_E;
+        }
+#endif
+        if (blocks == 0)
+            return 0;
+
+        iv      = (byte*)aes->reg;
+        enc_key = (byte*)aes->key;
+
+        status = wc_AesGetKeySize(aes, &keySize);
+        if (status != 0) {
+            return status;
+        }
+
+        status = wolfSSL_CryptHwMutexLock();
+        if (status != 0)
+            return status;
+
+        switch (keySize) {
+            case MXC_AES_KEY_128_LEN:
+                MXC_TPU_Cipher_Config(MXC_TPU_MODE_CBC, MXC_TPU_CIPHER_AES128);
+                status = MXC_TPU_Cipher_AES_Encrypt(in, iv, aes->key, 
+                                MXC_TPU_CIPHER_AES128, MXC_TPU_MODE_CBC,
+                                MXC_AES_DATA_LEN, out);
+                break;
+            case MXC_AES_KEY_192_LEN:
+                MXC_TPU_Cipher_Config(MXC_TPU_MODE_CBC, MXC_TPU_CIPHER_AES192);
+                status = MXC_TPU_Cipher_AES_Encrypt(in, iv, aes->key, 
+                                MXC_TPU_CIPHER_AES192, MXC_TPU_MODE_CBC,
+                                MXC_AES_DATA_LEN, out);
+                break;
+                
+            case MXC_AES_KEY_256_LEN:
+                MXC_TPU_Cipher_Config(MXC_TPU_MODE_CBC, MXC_TPU_CIPHER_AES256);
+                status = MXC_TPU_Cipher_AES_Encrypt(in, iv, aes->key, 
+                                MXC_TPU_CIPHER_AES256, MXC_TPU_MODE_CBC,
+                                MXC_AES_DATA_LEN, out);
+                break;
+            default:
+                status = -1;
+            break;
+        }
+        wolfSSL_CryptHwMutexUnLock();
+
+        /* store iv for next call */
+        if (status == E_SUCCESS) {
+            XMEMCPY(iv, out + sz - AES_BLOCK_SIZE, AES_BLOCK_SIZE);
+        }
+
+        return (status == E_SUCCESS) ? 0 : -1;
+    }
+
+    #ifdef HAVE_AES_DECRYPT
+    int wc_AesCbcDecrypt(Aes* aes, byte* out, const byte* in, word32 sz)
+    {
+        word32 keySize;
+        int status;
+        byte *iv, *dec_key;
+        byte temp_block[AES_BLOCK_SIZE];
+        word32 blocks = (sz / AES_BLOCK_SIZE);
+
+#ifdef WOLFSSL_AES_CBC_LENGTH_CHECKS
+        if (sz % AES_BLOCK_SIZE) {
+            return BAD_LENGTH_E;
+        }
+#endif
+        if (blocks == 0)
+            return 0;
+
+        iv      = (byte*)aes->reg;
+        dec_key = (byte*)aes->key;
+
+        status = wc_AesGetKeySize(aes, &keySize);
+        if (status != 0) {
+            return status;
+        }
+
+        /* get IV for next call */
+        XMEMCPY(temp_block, in + sz - AES_BLOCK_SIZE, AES_BLOCK_SIZE);
+        
+        status = wolfSSL_CryptHwMutexLock();
+        if (status != 0)
+            return status;
+
+        switch (keySize) {
+            case MXC_AES_KEY_128_LEN:
+                MXC_TPU_Cipher_Config(MXC_TPU_MODE_CBC, MXC_TPU_CIPHER_AES128);
+                status = MXC_TPU_Cipher_AES_Decrypt(in, iv, aes->key, 
+                                MXC_TPU_CIPHER_AES128, MXC_TPU_MODE_CBC,
+                                MXC_AES_DATA_LEN, out);
+                break;
+            case MXC_AES_KEY_192_LEN:
+                MXC_TPU_Cipher_Config(MXC_TPU_MODE_CBC, MXC_TPU_CIPHER_AES192);
+                status = MXC_TPU_Cipher_AES_Decrypt(in, iv, aes->key, 
+                                MXC_TPU_CIPHER_AES192, MXC_TPU_MODE_CBC,
+                                MXC_AES_DATA_LEN, out);
+                break;
+            case MXC_AES_KEY_256_LEN:
+                MXC_TPU_Cipher_Config(MXC_TPU_MODE_CBC, MXC_TPU_CIPHER_AES256);
+                status = MXC_TPU_Cipher_AES_Decrypt(in, iv, aes->key, 
+                                MXC_TPU_CIPHER_AES256, MXC_TPU_MODE_CBC,
+                                MXC_AES_DATA_LEN, out);
+                break;
+            default:
+                status = -1;
+            break;
+        }
+        wolfSSL_CryptHwMutexUnLock();
+
+        /* store iv for next call */
+        if (status == E_SUCCESS) {
+            XMEMCPY(iv, temp_block, AES_BLOCK_SIZE);
+        }
+
+        return (status == E_SUCCESS) ? 0 : -1;
+    }
+    #endif /* HAVE_AES_DECRYPT */
+
+
 
 #elif defined(WOLFSSL_PIC32MZ_CRYPT)
 
