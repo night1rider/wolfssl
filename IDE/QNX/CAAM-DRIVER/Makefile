@@ -28,7 +28,7 @@ CCFLAGS += -O2 -Wall
 # CCFLAGS += -DWOLFSSL_CAAM_IMX6UL
 
 # For IMX6Q devices
-CCFLAGS += -DWOLFSSL_CAAM_IMX6Q
+CCFLAGS += -DWOLFSSL_CAAM_IMX6Q -DWOLFSSL_CAAM_PRINT
 
 #Compiler flags for build profiles
 CCFLAGS_release += -O2
