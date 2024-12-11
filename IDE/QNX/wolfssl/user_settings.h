@@ -5,6 +5,9 @@
 #undef  WOLFSSL_SP
 #define WOLFSSL_SP
 
+#undef  DEBUG_WOLFSSL
+#define DEBUG_WOLFSSL
+
 #undef  WOLFSSL_SP_MATH_ALL
 #define WOLFSSL_SP_MATH_ALL
 
