@@ -30,6 +30,9 @@
 #undef  WOLFSSL_USE_ALIGN
 #define WOLFSSL_USE_ALIGN
 
+#undef  WOLFSSL_CAAM_PRINT
+#define WOLFSSL_CAAM_PRINT
+
 /* Build CAAM support */
 #undef  WOLFSSL_CAAM
 #define WOLFSSL_CAAM

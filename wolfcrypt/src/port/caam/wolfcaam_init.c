@@ -370,7 +370,7 @@ int wc_caamInit(void)
     WOLFSSL_MSG("Starting interface with CAAM driver");
     if (CAAM_INIT_INTERFACE() != 0) {
         WOLFSSL_MSG("Error initializing CAAM");
-        return -2;
+        return -1;
     }
 
 #if 0
