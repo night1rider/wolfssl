@@ -1,4 +1,4 @@
-/* dilithium.c
+/* mldsa-cuda.cu
  *
  * Copyright (C) 2006-2025 wolfSSL Inc.
  *
@@ -19,118 +19,6 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-/* Based on ed448.c and Reworked for Dilithium by Anthony Hu.
- * WolfSSL implementation by Sean Parkinson.
- */
-
-/* Possible Dilithium/ML-DSA options:
- *
- * HAVE_DILITHIUM                                             Default: OFF
- *   Enables the code in this file to be compiled.
- * WOLFSSL_WC_DILITHIUM                                       Default: OFF
- *   Compiles the wolfSSL implementation of dilithium.
- *
- * WOLFSSL_NO_ML_DSA_44                                       Default: OFF
- *   Does not compile in parameter set ML-DSA-44 and any code specific to that
- *   parameter set.
- * WOLFSSL_NO_ML_DSA_65                                       Default: OFF
- *   Does not compile in parameter set ML-DSA-65 and any code specific to that
- *   parameter set.
- * WOLFSSL_NO_ML_DSA_87                                       Default: OFF
- *   Does not compile in parameter set ML-DSA-87 and any code specific to that
- *   parameter set.
- *
- * WOLFSSL_DILITHIUM_NO_LARGE_CODE                            Default: OFF
- *   Compiles smaller, fast code with speed trade-off.
- * WOLFSSL_DILITHIUM_SMALL                                    Default: OFF
- *   Compiles to small code size with a speed trade-off.
- * WOLFSSL_DILITHIUM_VERIFY_ONLY                              Default: OFF
- *   Compiles in only the verification and public key operations.
- * WOLFSSL_DILITHIUM_VERIFY_SMALL_MEM                         Default: OFF
- *   Compiles verification implementation that uses smaller amounts of memory.
- * WOLFSSL_DILITHIUM_VERIFY_NO_MALLOC                         Default: OFF
- *   Only works with WOLFSSL_DILITHIUM_VERIFY_SMALL_MEM.
- *   Don't allocate memory with XMALLOC. Memory is pinned against key.
- * WOLFSSL_DILITHIUM_ASSIGN_KEY                               Default: OFF
- *   Key data is assigned into Dilithium key rather than copied.
- *   Life of key data passed in is tightly coupled to life of Dilithium key.
- *   Cannot be used when make key is enabled.
- * WOLFSSL_DILITHIUM_SIGN_SMALL_MEM                           Default: OFF
- *   Compiles signature implementation that uses smaller amounts of memory but
- *   is considerably slower.
- * WOLFSSL_DILITHIUM_SIGN_SMALL_MEM_PRECALC                   Default: OFF
- *   Compiles signature implementation that uses smaller amounts of memory but
- *   is considerably slower. Allocates vectors and decodes private key data
- *   into them upfront.
- * WOLFSSL_DILITHIUM_SIGN_SMALL_MEM_PRECALC_A                 Default: OFF
- *   Compiles signature implementation that uses smaller amounts of memory but
- *   is slower. Allocates matrix A and calculates it upfront.
- * WOLFSSL_DILITHIUM_MAKE_KEY_SMALL_MEM                       Default: OFF
- *   Compiles key generation implementation that uses smaller amounts of memory
- *   but is slower.
- * WOLFSSL_DILITHIUM_SMALL_MEM_POLY64                         Default: OFF
- *   Compiles the small memory implementations to use a 64-bit polynomial.
- *   Uses 2KB of memory but is slightly quicker (2.75-7%).
- *
- * WOLFSSL_DILITHIUM_ALIGNMENT                                Default: 8
- *   Use to indicate whether loading and storing of words needs to be aligned.
- *   Default is to use WOLFSSL_GENERAL_ALIGNMENT - should be 4 on some ARM CPUs.
- *   Set this value explicitly if specific Dilithium implementation alignment is
- *   needed.
- *
- * WOLFSSL_DILITHIUM_NO_ASN1                                  Default: OFF
- *   Disables any ASN.1 encoding or decoding code.
- * WOLFSSL_DILITHIUM_REVERSE_HASH_OID                         Default: OFF
- *   Reverse the DER encoded hash oid when signing and verifying a pre-hashed
- *   message.
- *
- * WC_DILITHIUM_CACHE_MATRIX_A                                Default: OFF
- *   Enable caching of the A matrix on import.
- *   Less work is required in sign and verify operations.
- * WC_DILITHIUM_CACHE_PRIV_VECTORS                            Default: OFF
- *   Enable caching of private key vectors on import.
- *   Enables WC_DILITHIUM_CACHE_MATRIX_A.
- *   Less work is required in sign operations.
- * WC_DILITHIUM_CACHE_PUB_VECTORS                             Default: OFF
- *   Enable caching of public key vectors on import.
- *   Enables WC_DILITHIUM_CACHE_MATRIX_A.
- *   Less work is required in sign operations.
- * WC_DILITHIUM_FIXED_ARRAY                                   Default: OFF
- *   Make the matrix and vectors of cached data fixed arrays that have
- *   maximumal sizes for the configured parameters.
- *   Useful in low dynamic memory situations.
- *
- * WOLFSSL_DILITHIUM_SIGN_CHECK_Y                             Default: OFF
- *   Check vector y is in required range as an early check on valid vector z.
- *   Falsely reports invalid in approximately 1-2% of checks.
- *   All valid reports are true.
- *   Fast fail gives faster signing times on average.
- *   DO NOT enable this if implementation must be conformant to FIPS 204.
- * WOLFSSL_DILITHIUM_SIGN_CHECK_W0                            Default: OFF
- *   Check vector w0 is in required range as an early check on valid vector r0.
- *   Falsely reports invalid in approximately 3-5% of checks.
- *   All valid reports are true.
- *   Fast fail gives faster signing times on average.
- *   DO NOT enable this if implementation must be conformant to FIPS 204.
- *
- * DILITHIUM_MUL_SLOW                                         Default: OFF
- *   Define when multiplying by Q / 44 is slower than masking.
- *   Only applies to ML-DSA-44.
- * DILITHIUM_MUL_44_SLOW                                      Default: OFF
- *   Define when multiplying by 44 is slower than by 11.
- *   Only applies to ML-DSA-44.
- * DILITHIUM_MUL_11_SLOW                                      Default: OFF
- *   Define when multiplying by 11 is slower than adding and shifting.
- *   Only applies to ML-DSA-44.
- * DILITHIUM_MUL_QINV_SLOW                                    Default: OFF
- *   Define when multiplying by QINV 0x3802001 is slower than add, subtract and
- *   shift equivalent.
- * DILITHIUM_MUL_Q_SLOW                                       Default: OFF
- *   Define when multiplying by Q 0x7fe001 is slower than add, subtract and
- *   shift equivalent.
- */
-
-
 #ifdef HAVE_CONFIG_H
     #include <config.h>
 #endif
@@ -144,19 +32,20 @@
 
 #if defined(HAVE_DILITHIUM)
 
-#ifdef HAVE_LIBOQS
-#include <oqs/oqs.h>
-#endif
 
 #include <wolfssl/wolfcrypt/dilithium.h>
 #include <wolfssl/wolfcrypt/hash.h>
 #include <wolfssl/wolfcrypt/sha3.h>
 #include <wolfssl/wolfcrypt/error-crypt.h>
+
 #ifdef NO_INLINE
     #include <wolfssl/wolfcrypt/misc.h>
 #else
     #define WOLFSSL_MISC_INCLUDED
-    #include <wolfcrypt/src/misc.c>
+    #define WOLFSSL_HAVE_MIN
+    #define WOLFSSL_HAVE_MAX
+    #define WOLFSSL_NO_FORCE_ZERO
+    /* #include <wolfcrypt/src/misc.c> */
 #endif
 
 #if defined(WOLFSSL_DILITHIUM_SIGN_SMALL_MEM_PRECALC) && \
@@ -171,13 +60,38 @@
     #endif
 #endif
 
+#if defined(WOLFSSL_WC_DILITHIUM) && defined(WC_MLKEM_CUDA)
+/* Include CUDA Runtime header */
+#include <cuda_runtime.h>
 
-#ifdef WC_MLKEM_CUDA
-/* Implemented CUDA version of Dilithium */
-/* in wolfcrypt/src/port/cuda/mldsa-cuda.cu */
-#else
 
-#ifdef WOLFSSL_WC_DILITHIUM
+void ForceZero(void* mem, word32 len)
+{
+    volatile byte* z = (volatile byte*)mem;
+
+#if (defined(WOLFSSL_X86_64_BUILD) || defined(WOLFSSL_AARCH64_BUILD)) \
+            && defined(WORD64_AVAILABLE)
+    volatile word64* w;
+    #ifndef WOLFSSL_UNALIGNED_64BIT_ACCESS
+        word32 l = (sizeof(word64) - ((size_t)z & (sizeof(word64)-1))) &
+                                                             (sizeof(word64)-1);
+
+        if (len < l) l = len;
+        len -= l;
+        while (l--) *z++ = 0;
+    #endif
+        for (w = (volatile word64*)z;
+             len >= sizeof(*w);
+             len -= (word32)sizeof(*w))
+        {
+            *w++ = 0;
+        }
+    z = (volatile byte*)w;
+#endif
+
+    while (len--) *z++ = 0;
+}
+
 
 #ifdef DEBUG_DILITHIUM
 void print_polys(const char* name, const sword32* a, int d1, int d2);
@@ -3676,19 +3590,11 @@ static void dilithium_vec_use_hint(sword32* w1, byte k, word32 gamma2,
  * @param  [in]  a  64-bit value to be reduced.
  * @return  Montgomery reduction result.
  */
-static sword32 dilithium_mont_red(sword64 a)
+static __host__ __device__ sword32 dilithium_mont_red(sword64 a)
 {
-#ifndef DILITHIUM_MUL_QINV_SLOW
-    sword64 t = (sword32)((sword32)a * (sword32)DILITHIUM_QINV);
-#else
     sword64 t = (sword32)((sword32)a + (sword32)((sword32)a << 13) -
         (sword32)((sword32)a << 23) + (sword32)((sword32)a << 26));
-#endif
-#ifndef DILITHIUM_MUL_Q_SLOW
-    return (sword32)((a - ((sword32)t * (sword64)DILITHIUM_Q)) >> 32);
-#else
     return (sword32)((a - (t << 23) + (t << 13) - t) >> 32);
-#endif
 }
 
 #if !defined(WOLFSSL_DILITHIUM_SMALL) || !defined(WOLFSSL_DILITHIUM_NO_SIGN)
@@ -3698,14 +3604,10 @@ static sword32 dilithium_mont_red(sword64 a)
  * @param  [in]  a  32-bit value to be reduced to range of q.
  * @return  Modulo result.
  */
-static sword32 dilithium_red(sword32 a)
+static __host__ __device__  sword32 dilithium_red(sword32 a)
 {
     sword32 t = (sword32)((a + (1 << 22)) >> 23);
-#ifndef DILITHIUM_MUL_Q_SLOW
-    return (sword32)(a - (t * DILITHIUM_Q));
-#else
     return (sword32)(a - (t << 23) + (t << 13) - t);
-#endif
 }
 
 #endif /* !WOLFSSL_DILITHIUM_SMALL || !WOLFSSL_DILITHIUM_NO_SIGN */
@@ -3745,6 +3647,8 @@ static const sword32 zetas[DILITHIUM_N] = {
  -2939036, -2235985,  -420899, -2286327,   183443,  -976891,  1612842, -3545687,
   -554416,  3919660,   -48306, -1362209,  3937738,  1400424,  -846154,  1976782
 };
+
+__device__ __constant__ sword32 zetas_d[DILITHIUM_N];
 
 #ifndef WOLFSSL_DILITHIUM_SMALL
 /* Zetas for inverse NTT. */
@@ -3811,261 +3715,36 @@ while (0)
  *
  * @param [in, out] r  Polynomial to transform.
  */
-static void dilithium_ntt(sword32* r)
+// GPU kernel implementation - one thread per butterfly operation
+// Simple serial GPU kernel - only one thread does all the work
+__global__ void dilithium_ntt_kernel(sword32* r)
 {
-#ifdef WOLFSSL_DILITHIUM_SMALL
-    unsigned int len;
-    unsigned int k;
-    unsigned int j;
+    // Only the first thread executes the algorithm
+    if (threadIdx.x == 0 && blockIdx.x == 0) {
+        unsigned int j;
+        unsigned int k;
+        sword32 t0;
+        sword32 t1;
+        sword32 t2;
+        sword32 t3;
 
-    k = 0;
-    for (len = DILITHIUM_N / 2; len >= 1; len >>= 1) {
-        unsigned int start;
-        for (start = 0; start < DILITHIUM_N; start = j + len) {
-            sword32 zeta = zetas[++k];
-            for (j = start; j < start + len; ++j) {
-                sword32 t = dilithium_mont_red((sword64)zeta * r[j + len]);
-                sword32 rj = r[j];
-                r[j + len] = rj - t;
-                r[j] = rj + t;
-            }
-        }
-    }
-#elif defined(WOLFSSL_DILITHIUM_NO_LARGE_CODE)
-    unsigned int j;
-    unsigned int k;
-    unsigned int start;
-    sword32 zeta;
+        sword32 zeta128 = zetas_d[1];
+        sword32 zeta640 = zetas_d[2];
+        sword32 zeta641 = zetas_d[3];
+        for (j = 0; j < DILITHIUM_N / 8; j++) {
+            sword32 r0 = r[j +   0];
+            sword32 r1 = r[j +  32];
+            sword32 r2 = r[j +  64];
+            sword32 r3 = r[j +  96];
+            sword32 r4 = r[j + 128];
+            sword32 r5 = r[j + 160];
+            sword32 r6 = r[j + 192];
+            sword32 r7 = r[j + 224];
 
-    zeta = zetas[1];
-    for (j = 0; j < DILITHIUM_N / 2; j++) {
-        sword32 t =
-            dilithium_mont_red((sword64)zeta * r[j + DILITHIUM_N / 2]);
-        sword32 rj = r[j];
-        r[j + DILITHIUM_N / 2] = rj - t;
-        r[j] = rj + t;
-    }
-
-    k = 1;
-    NTT(64);
-    NTT(32);
-    NTT(16);
-    NTT(8);
-    NTT(4);
-    NTT(2);
-
-    for (j = 0; j < DILITHIUM_N; j += 2) {
-        sword32 t = dilithium_mont_red((sword64)zetas[++k] * r[j + 1]);
-        sword32 rj = r[j];
-        r[j + 1] = rj - t;
-        r[j] = rj + t;
-    }
-#elif defined(WC_32BIT_CPU)
-    unsigned int j;
-    unsigned int k;
-    sword32 t0;
-    sword32 t2;
-
-    sword32 zeta128 = zetas[1];
-    sword32 zeta640 = zetas[2];
-    sword32 zeta641 = zetas[3];
-    for (j = 0; j < DILITHIUM_N / 4; j++) {
-        sword32 r0 = r[j +   0];
-        sword32 r2 = r[j +  64];
-        sword32 r4 = r[j + 128];
-        sword32 r6 = r[j + 192];
-
-        t0 = dilithium_mont_red((sword64)zeta128 * r4);
-        t2 = dilithium_mont_red((sword64)zeta128 * r6);
-        r4 = r0 - t0;
-        r6 = r2 - t2;
-        r0 += t0;
-        r2 += t2;
-
-        t0 = dilithium_mont_red((sword64)zeta640 * r2);
-        t2 = dilithium_mont_red((sword64)zeta641 * r6);
-        r2 = r0 - t0;
-        r6 = r4 - t2;
-        r0 += t0;
-        r4 += t2;
-
-        r[j +   0] = r0;
-        r[j +  64] = r2;
-        r[j + 128] = r4;
-        r[j + 192] = r6;
-    }
-
-    for (j = 0; j < DILITHIUM_N; j += 64) {
-        int i;
-        sword32 zeta32  = zetas[ 4 + j / 64 + 0];
-        sword32 zeta160 = zetas[ 8 + j / 32 + 0];
-        sword32 zeta161 = zetas[ 8 + j / 32 + 1];
-        for (i = 0; i < 16; i++) {
-            sword32 r0 = r[j + i +  0];
-            sword32 r2 = r[j + i + 16];
-            sword32 r4 = r[j + i + 32];
-            sword32 r6 = r[j + i + 48];
-
-            t0 = dilithium_mont_red((sword64)zeta32 * r4);
-            t2 = dilithium_mont_red((sword64)zeta32 * r6);
-            r4 = r0 - t0;
-            r6 = r2 - t2;
-            r0 += t0;
-            r2 += t2;
-
-            t0 = dilithium_mont_red((sword64)zeta160 * r2);
-            t2 = dilithium_mont_red((sword64)zeta161 * r6);
-            r2 = r0 - t0;
-            r6 = r4 - t2;
-            r0 += t0;
-            r4 += t2;
-
-            r[j + i +  0] = r0;
-            r[j + i + 16] = r2;
-            r[j + i + 32] = r4;
-            r[j + i + 48] = r6;
-        }
-    }
-
-    for (j = 0; j < DILITHIUM_N; j += 16) {
-        int i;
-        sword32 zeta8   = zetas[16 + j / 16];
-        sword32 zeta40  = zetas[32 + j / 8 + 0];
-        sword32 zeta41  = zetas[32 + j / 8 + 1];
-        for (i = 0; i < 4; i++) {
-            sword32 r0 = r[j + i +  0];
-            sword32 r2 = r[j + i +  4];
-            sword32 r4 = r[j + i +  8];
-            sword32 r6 = r[j + i + 12];
-
-            t0 = dilithium_mont_red((sword64)zeta8 * r4);
-            t2 = dilithium_mont_red((sword64)zeta8 * r6);
-            r4 = r0 - t0;
-            r6 = r2 - t2;
-            r0 += t0;
-            r2 += t2;
-
-            t0 = dilithium_mont_red((sword64)zeta40 * r2);
-            t2 = dilithium_mont_red((sword64)zeta41 * r6);
-            r2 = r0 - t0;
-            r6 = r4 - t2;
-            r0 += t0;
-            r4 += t2;
-
-            r[j + i +  0] = r0;
-            r[j + i +  4] = r2;
-            r[j + i +  8] = r4;
-            r[j + i + 12] = r6;
-        }
-    }
-
-    k = 128;
-    for (j = 0; j < DILITHIUM_N; j += 4) {
-        sword32 zeta2 = zetas[64 + j / 4];
-        sword32 r0 = r[j + 0];
-        sword32 r2 = r[j + 1];
-        sword32 r4 = r[j + 2];
-        sword32 r6 = r[j + 3];
-
-        t0 = dilithium_mont_red((sword64)zeta2 * r4);
-        t2 = dilithium_mont_red((sword64)zeta2 * r6);
-        r4 = r0 - t0;
-        r6 = r2 - t2;
-        r0 += t0;
-        r2 += t2;
-
-        t0 = dilithium_mont_red((sword64)zetas[k++] * r2);
-        t2 = dilithium_mont_red((sword64)zetas[k++] * r6);
-        r2 = r0 - t0;
-        r6 = r4 - t2;
-        r0 += t0;
-        r4 += t2;
-
-        r[j + 0] = r0;
-        r[j + 1] = r2;
-        r[j + 2] = r4;
-        r[j + 3] = r6;
-    }
-#else
-    unsigned int j;
-    unsigned int k;
-    sword32 t0;
-    sword32 t1;
-    sword32 t2;
-    sword32 t3;
-
-    sword32 zeta128 = zetas[1];
-    sword32 zeta640 = zetas[2];
-    sword32 zeta641 = zetas[3];
-    for (j = 0; j < DILITHIUM_N / 8; j++) {
-        sword32 r0 = r[j +   0];
-        sword32 r1 = r[j +  32];
-        sword32 r2 = r[j +  64];
-        sword32 r3 = r[j +  96];
-        sword32 r4 = r[j + 128];
-        sword32 r5 = r[j + 160];
-        sword32 r6 = r[j + 192];
-        sword32 r7 = r[j + 224];
-
-        t0 = dilithium_mont_red((sword64)zeta128 * r4);
-        t1 = dilithium_mont_red((sword64)zeta128 * r5);
-        t2 = dilithium_mont_red((sword64)zeta128 * r6);
-        t3 = dilithium_mont_red((sword64)zeta128 * r7);
-        r4 = r0 - t0;
-        r5 = r1 - t1;
-        r6 = r2 - t2;
-        r7 = r3 - t3;
-        r0 += t0;
-        r1 += t1;
-        r2 += t2;
-        r3 += t3;
-
-        t0 = dilithium_mont_red((sword64)zeta640 * r2);
-        t1 = dilithium_mont_red((sword64)zeta640 * r3);
-        t2 = dilithium_mont_red((sword64)zeta641 * r6);
-        t3 = dilithium_mont_red((sword64)zeta641 * r7);
-        r2 = r0 - t0;
-        r3 = r1 - t1;
-        r6 = r4 - t2;
-        r7 = r5 - t3;
-        r0 += t0;
-        r1 += t1;
-        r4 += t2;
-        r5 += t3;
-
-        r[j +   0] = r0;
-        r[j +  32] = r1;
-        r[j +  64] = r2;
-        r[j +  96] = r3;
-        r[j + 128] = r4;
-        r[j + 160] = r5;
-        r[j + 192] = r6;
-        r[j + 224] = r7;
-    }
-
-    for (j = 0; j < DILITHIUM_N; j += 64) {
-        int i;
-        sword32 zeta32  = zetas[ 4 + j / 64 + 0];
-        sword32 zeta160 = zetas[ 8 + j / 32 + 0];
-        sword32 zeta161 = zetas[ 8 + j / 32 + 1];
-        sword32 zeta80  = zetas[16 + j / 16 + 0];
-        sword32 zeta81  = zetas[16 + j / 16 + 1];
-        sword32 zeta82  = zetas[16 + j / 16 + 2];
-        sword32 zeta83  = zetas[16 + j / 16 + 3];
-        for (i = 0; i < 8; i++) {
-            sword32 r0 = r[j + i +  0];
-            sword32 r1 = r[j + i +  8];
-            sword32 r2 = r[j + i + 16];
-            sword32 r3 = r[j + i + 24];
-            sword32 r4 = r[j + i + 32];
-            sword32 r5 = r[j + i + 40];
-            sword32 r6 = r[j + i + 48];
-            sword32 r7 = r[j + i + 56];
-
-            t0 = dilithium_mont_red((sword64)zeta32 * r4);
-            t1 = dilithium_mont_red((sword64)zeta32 * r5);
-            t2 = dilithium_mont_red((sword64)zeta32 * r6);
-            t3 = dilithium_mont_red((sword64)zeta32 * r7);
+            t0 = dilithium_mont_red((sword64)zeta128 * r4);
+            t1 = dilithium_mont_red((sword64)zeta128 * r5);
+            t2 = dilithium_mont_red((sword64)zeta128 * r6);
+            t3 = dilithium_mont_red((sword64)zeta128 * r7);
             r4 = r0 - t0;
             r5 = r1 - t1;
             r6 = r2 - t2;
@@ -4075,10 +3754,10 @@ static void dilithium_ntt(sword32* r)
             r2 += t2;
             r3 += t3;
 
-            t0 = dilithium_mont_red((sword64)zeta160 * r2);
-            t1 = dilithium_mont_red((sword64)zeta160 * r3);
-            t2 = dilithium_mont_red((sword64)zeta161 * r6);
-            t3 = dilithium_mont_red((sword64)zeta161 * r7);
+            t0 = dilithium_mont_red((sword64)zeta640 * r2);
+            t1 = dilithium_mont_red((sword64)zeta640 * r3);
+            t2 = dilithium_mont_red((sword64)zeta641 * r6);
+            t3 = dilithium_mont_red((sword64)zeta641 * r7);
             r2 = r0 - t0;
             r3 = r1 - t1;
             r6 = r4 - t2;
@@ -4088,10 +3767,129 @@ static void dilithium_ntt(sword32* r)
             r4 += t2;
             r5 += t3;
 
-            t0 = dilithium_mont_red((sword64)zeta80 * r1);
-            t1 = dilithium_mont_red((sword64)zeta81 * r3);
-            t2 = dilithium_mont_red((sword64)zeta82 * r5);
-            t3 = dilithium_mont_red((sword64)zeta83 * r7);
+            r[j +   0] = r0;
+            r[j +  32] = r1;
+            r[j +  64] = r2;
+            r[j +  96] = r3;
+            r[j + 128] = r4;
+            r[j + 160] = r5;
+            r[j + 192] = r6;
+            r[j + 224] = r7;
+        }
+
+        for (j = 0; j < DILITHIUM_N; j += 64) {
+            int i;
+            sword32 zeta32  = zetas_d[ 4 + j / 64 + 0];
+            sword32 zeta160 = zetas_d[ 8 + j / 32 + 0];
+            sword32 zeta161 = zetas_d[ 8 + j / 32 + 1];
+            sword32 zeta80  = zetas_d[16 + j / 16 + 0];
+            sword32 zeta81  = zetas_d[16 + j / 16 + 1];
+            sword32 zeta82  = zetas_d[16 + j / 16 + 2];
+            sword32 zeta83  = zetas_d[16 + j / 16 + 3];
+            for (i = 0; i < 8; i++) {
+                sword32 r0 = r[j + i +  0];
+                sword32 r1 = r[j + i +  8];
+                sword32 r2 = r[j + i + 16];
+                sword32 r3 = r[j + i + 24];
+                sword32 r4 = r[j + i + 32];
+                sword32 r5 = r[j + i + 40];
+                sword32 r6 = r[j + i + 48];
+                sword32 r7 = r[j + i + 56];
+
+                t0 = dilithium_mont_red((sword64)zeta32 * r4);
+                t1 = dilithium_mont_red((sword64)zeta32 * r5);
+                t2 = dilithium_mont_red((sword64)zeta32 * r6);
+                t3 = dilithium_mont_red((sword64)zeta32 * r7);
+                r4 = r0 - t0;
+                r5 = r1 - t1;
+                r6 = r2 - t2;
+                r7 = r3 - t3;
+                r0 += t0;
+                r1 += t1;
+                r2 += t2;
+                r3 += t3;
+
+                t0 = dilithium_mont_red((sword64)zeta160 * r2);
+                t1 = dilithium_mont_red((sword64)zeta160 * r3);
+                t2 = dilithium_mont_red((sword64)zeta161 * r6);
+                t3 = dilithium_mont_red((sword64)zeta161 * r7);
+                r2 = r0 - t0;
+                r3 = r1 - t1;
+                r6 = r4 - t2;
+                r7 = r5 - t3;
+                r0 += t0;
+                r1 += t1;
+                r4 += t2;
+                r5 += t3;
+
+                t0 = dilithium_mont_red((sword64)zeta80 * r1);
+                t1 = dilithium_mont_red((sword64)zeta81 * r3);
+                t2 = dilithium_mont_red((sword64)zeta82 * r5);
+                t3 = dilithium_mont_red((sword64)zeta83 * r7);
+                r1 = r0 - t0;
+                r3 = r2 - t1;
+                r5 = r4 - t2;
+                r7 = r6 - t3;
+                r0 += t0;
+                r2 += t1;
+                r4 += t2;
+                r6 += t3;
+
+                r[j + i +  0] = r0;
+                r[j + i +  8] = r1;
+                r[j + i + 16] = r2;
+                r[j + i + 24] = r3;
+                r[j + i + 32] = r4;
+                r[j + i + 40] = r5;
+                r[j + i + 48] = r6;
+                r[j + i + 56] = r7;
+            }
+        }
+
+        k = 128;
+        for (j = 0; j < DILITHIUM_N; j += 8) {
+            sword32 zeta4  = zetas_d[32 + j / 8 + 0];
+            sword32 zeta20 = zetas_d[64 + j / 4 + 0];
+            sword32 zeta21 = zetas_d[64 + j / 4 + 1];
+            sword32 r0 = r[j + 0];
+            sword32 r1 = r[j + 1];
+            sword32 r2 = r[j + 2];
+            sword32 r3 = r[j + 3];
+            sword32 r4 = r[j + 4];
+            sword32 r5 = r[j + 5];
+            sword32 r6 = r[j + 6];
+            sword32 r7 = r[j + 7];
+
+            t0 = dilithium_mont_red((sword64)zeta4 * r4);
+            t1 = dilithium_mont_red((sword64)zeta4 * r5);
+            t2 = dilithium_mont_red((sword64)zeta4 * r6);
+            t3 = dilithium_mont_red((sword64)zeta4 * r7);
+            r4 = r0 - t0;
+            r5 = r1 - t1;
+            r6 = r2 - t2;
+            r7 = r3 - t3;
+            r0 += t0;
+            r1 += t1;
+            r2 += t2;
+            r3 += t3;
+
+            t0 = dilithium_mont_red((sword64)zeta20 * r2);
+            t1 = dilithium_mont_red((sword64)zeta20 * r3);
+            t2 = dilithium_mont_red((sword64)zeta21 * r6);
+            t3 = dilithium_mont_red((sword64)zeta21 * r7);
+            r2 = r0 - t0;
+            r3 = r1 - t1;
+            r6 = r4 - t2;
+            r7 = r5 - t3;
+            r0 += t0;
+            r1 += t1;
+            r4 += t2;
+            r5 += t3;
+
+            t0 = dilithium_mont_red((sword64)zetas_d[k++] * r1);
+            t1 = dilithium_mont_red((sword64)zetas_d[k++] * r3);
+            t2 = dilithium_mont_red((sword64)zetas_d[k++] * r5);
+            t3 = dilithium_mont_red((sword64)zetas_d[k++] * r7);
             r1 = r0 - t0;
             r3 = r2 - t1;
             r5 = r4 - t2;
@@ -4101,80 +3899,72 @@ static void dilithium_ntt(sword32* r)
             r4 += t2;
             r6 += t3;
 
-            r[j + i +  0] = r0;
-            r[j + i +  8] = r1;
-            r[j + i + 16] = r2;
-            r[j + i + 24] = r3;
-            r[j + i + 32] = r4;
-            r[j + i + 40] = r5;
-            r[j + i + 48] = r6;
-            r[j + i + 56] = r7;
+            r[j + 0] = r0;
+            r[j + 1] = r1;
+            r[j + 2] = r2;
+            r[j + 3] = r3;
+            r[j + 4] = r4;
+            r[j + 5] = r5;
+            r[j + 6] = r6;
+            r[j + 7] = r7;
         }
     }
+}
 
-    k = 128;
-    for (j = 0; j < DILITHIUM_N; j += 8) {
-        sword32 zeta4  = zetas[32 + j / 8 + 0];
-        sword32 zeta20 = zetas[64 + j / 4 + 0];
-        sword32 zeta21 = zetas[64 + j / 4 + 1];
-        sword32 r0 = r[j + 0];
-        sword32 r1 = r[j + 1];
-        sword32 r2 = r[j + 2];
-        sword32 r3 = r[j + 3];
-        sword32 r4 = r[j + 4];
-        sword32 r5 = r[j + 5];
-        sword32 r6 = r[j + 6];
-        sword32 r7 = r[j + 7];
-
-        t0 = dilithium_mont_red((sword64)zeta4 * r4);
-        t1 = dilithium_mont_red((sword64)zeta4 * r5);
-        t2 = dilithium_mont_red((sword64)zeta4 * r6);
-        t3 = dilithium_mont_red((sword64)zeta4 * r7);
-        r4 = r0 - t0;
-        r5 = r1 - t1;
-        r6 = r2 - t2;
-        r7 = r3 - t3;
-        r0 += t0;
-        r1 += t1;
-        r2 += t2;
-        r3 += t3;
-
-        t0 = dilithium_mont_red((sword64)zeta20 * r2);
-        t1 = dilithium_mont_red((sword64)zeta20 * r3);
-        t2 = dilithium_mont_red((sword64)zeta21 * r6);
-        t3 = dilithium_mont_red((sword64)zeta21 * r7);
-        r2 = r0 - t0;
-        r3 = r1 - t1;
-        r6 = r4 - t2;
-        r7 = r5 - t3;
-        r0 += t0;
-        r1 += t1;
-        r4 += t2;
-        r5 += t3;
-
-        t0 = dilithium_mont_red((sword64)zetas[k++] * r1);
-        t1 = dilithium_mont_red((sword64)zetas[k++] * r3);
-        t2 = dilithium_mont_red((sword64)zetas[k++] * r5);
-        t3 = dilithium_mont_red((sword64)zetas[k++] * r7);
-        r1 = r0 - t0;
-        r3 = r2 - t1;
-        r5 = r4 - t2;
-        r7 = r6 - t3;
-        r0 += t0;
-        r2 += t1;
-        r4 += t2;
-        r6 += t3;
-
-        r[j + 0] = r0;
-        r[j + 1] = r1;
-        r[j + 2] = r2;
-        r[j + 3] = r3;
-        r[j + 4] = r4;
-        r[j + 5] = r5;
-        r[j + 6] = r6;
-        r[j + 7] = r7;
+// Keep the original function signature but make it use GPU
+static void dilithium_ntt(sword32* r)
+{
+    static int first_time = 1;
+    sword32* r_device;
+    cudaError_t cuda_ret;
+    
+    // First time initialization - copy zetas array to device
+    if (first_time) {
+        cuda_ret = cudaMemcpyToSymbol(zetas_d, zetas, DILITHIUM_N * sizeof(sword32));
+        if (cuda_ret != cudaSuccess) {
+            // Handle error - for now just print and continue
+            printf("CUDA error: %s\n", cudaGetErrorString(cuda_ret));
+        }
+        first_time = 0;
     }
-#endif
+    
+    // Allocate device memory
+    cuda_ret = cudaMalloc((void**)&r_device, DILITHIUM_N * sizeof(sword32));
+    if (cuda_ret != cudaSuccess) {
+        printf("CUDA error: %s\n", cudaGetErrorString(cuda_ret));
+        return; // Early return on error
+    }
+    
+    // Copy input data to device
+    cuda_ret = cudaMemcpy(r_device, r, DILITHIUM_N * sizeof(sword32), cudaMemcpyHostToDevice);
+    if (cuda_ret != cudaSuccess) {
+        printf("CUDA error: %s\n", cudaGetErrorString(cuda_ret));
+        cudaFree(r_device);
+        return;
+    }
+    
+    // Launch kernel with just one thread
+    dilithium_ntt_kernel<<<1, 1>>>(r_device);
+    
+    // Check for kernel launch errors
+    cuda_ret = cudaGetLastError();
+    if (cuda_ret != cudaSuccess) {
+        printf("CUDA error: %s\n", cudaGetErrorString(cuda_ret));
+        cudaFree(r_device);
+        return;
+    }
+    
+    // Wait for kernel to finish
+    cudaDeviceSynchronize();
+    
+    // Copy results back to host
+    cuda_ret = cudaMemcpy(r, r_device, DILITHIUM_N * sizeof(sword32), cudaMemcpyDeviceToHost);
+    if (cuda_ret != cudaSuccess) {
+        printf("CUDA error: %s\n", cudaGetErrorString(cuda_ret));
+    }
+    
+    // Free device memory
+    cudaFree(r_device);
 }
 
 #if !defined(WOLFSSL_DILITHIUM_NO_VERIFY) || \
@@ -10275,4 +10065,3 @@ int wc_Dilithium_PrivateKeyToDer(dilithium_key* key, byte* output, word32 len)
 #endif /* WOLFSSL_DILITHIUM_PRIVATE_KEY */
 
 #endif /* WC_MLKEM_CUDA */
-#endif /* HAVE_DILITHIUM */

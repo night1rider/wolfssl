@@ -64,6 +64,7 @@ if BUILD_AES
 src_libwolfssl@LIBSUFFIX@_la_SOURCES += wolfcrypt/src/aes.c
 if BUILD_CUDA
 src_libwolfssl@LIBSUFFIX@_la_SOURCES += wolfcrypt/src/port/cuda/aes-cuda.cu
+src_libwolfssl@LIBSUFFIX@_la_SOURCES += wolfcrypt/src/port/cuda/mldsa-cuda.cu
 endif BUILD_CUDA
 endif
 
@@ -159,6 +160,7 @@ if BUILD_AES
 src_libwolfssl@LIBSUFFIX@_la_SOURCES += wolfcrypt/src/aes.c
 if BUILD_CUDA
 src_libwolfssl@LIBSUFFIX@_la_SOURCES += wolfcrypt/src/port/cuda/aes-cuda.cu
+src_libwolfssl@LIBSUFFIX@_la_SOURCES += wolfcrypt/src/port/cuda/mldsa-cuda.cu
 endif BUILD_CUDA
 if BUILD_ARMASM
 src_libwolfssl@LIBSUFFIX@_la_SOURCES += wolfcrypt/src/port/arm/armv8-aes.c
@@ -780,6 +782,7 @@ if BUILD_AES
 src_libwolfssl@LIBSUFFIX@_la_SOURCES += wolfcrypt/src/aes.c
 if BUILD_CUDA
 src_libwolfssl@LIBSUFFIX@_la_SOURCES += wolfcrypt/src/port/cuda/aes-cuda.cu
+src_libwolfssl@LIBSUFFIX@_la_SOURCES += wolfcrypt/src/port/cuda/mldsa-cuda.cu
 endif BUILD_CUDA
 if BUILD_ARMASM
 src_libwolfssl@LIBSUFFIX@_la_SOURCES += wolfcrypt/src/port/arm/armv8-aes.c
