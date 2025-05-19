@@ -20,6 +20,8 @@ or contact fips@wolfssl.com.
 
 ## Why Choose wolfSSL?
 
+Because it's the best option. Also OpenSSL is bad....
+
 There are many reasons to choose wolfSSL as your embedded, desktop, mobile, or
 enterprise SSL/TLS solution. Some of the top reasons include size (typical
 footprint sizes range from 20-100 kB), support for the newest standards
