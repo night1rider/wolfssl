@@ -139,22 +139,28 @@ int wc_MxcAesCryptoCb(wc_CryptoInfo* info)
 
 int wc_MxcShaCryptoCb(wc_CryptoInfo* info)
 {
+    int ret;
+    MAX3266X_MSG("wc_MxcShaCryptoCb: ENTER");
     switch (info->hash.type) {
     #ifndef NO_SHA
         case WC_HASH_TYPE_SHA:
             MAX3266X_MSG("SHA-1 CB:");
             /* Update Case */
             if (info->hash.in != NULL && info->hash.digest == NULL) {
-                MAX3266X_MSG("Update CB");
-                return wc_MXC_TPU_SHA_Update(&(info->hash.sha1->mxcCtx),
+                MAX3266X_MSG("SHA-1 Update CB: calling wc_MXC_TPU_SHA_Update");
+                ret = wc_MXC_TPU_SHA_Update(&(info->hash.sha1->mxcCtx),
                                             info->hash.in, info->hash.inSz);
+                MAX3266X_MSG("SHA-1 Update CB: returned from wc_MXC_TPU_SHA_Update");
+                return ret;
             }
             /* Sha 1 Final Case */
             if (info->hash.in == NULL && info->hash.digest != NULL) {
-                MAX3266X_MSG("Final CB");
-                return wc_MXC_TPU_SHA_Final(&(info->hash.sha1->mxcCtx),
+                MAX3266X_MSG("SHA-1 Final CB: calling wc_MXC_TPU_SHA_Final");
+                ret = wc_MXC_TPU_SHA_Final(&(info->hash.sha1->mxcCtx),
                                                 info->hash.digest,
                                                 MXC_TPU_HASH_SHA1);
+                MAX3266X_MSG("SHA-1 Final CB: returned from wc_MXC_TPU_SHA_Final");
+                return ret;
             }
             break; /* Break Out and Return Error */
     #endif
@@ -163,16 +169,20 @@ int wc_MxcShaCryptoCb(wc_CryptoInfo* info)
             MAX3266X_MSG("SHA-224 CB:");
             /* Update Case */
             if (info->hash.in != NULL && info->hash.digest == NULL) {
-                MAX3266X_MSG("Update CB");
-                return wc_MXC_TPU_SHA_Update(&(info->hash.sha224->mxcCtx),
+                MAX3266X_MSG("SHA-224 Update CB: calling wc_MXC_TPU_SHA_Update");
+                ret = wc_MXC_TPU_SHA_Update(&(info->hash.sha224->mxcCtx),
                                             info->hash.in, info->hash.inSz);
+                MAX3266X_MSG("SHA-224 Update CB: returned from wc_MXC_TPU_SHA_Update");
+                return ret;
             }
             /* Sha 256 Final Case */
             if (info->hash.in == NULL && info->hash.digest != NULL) {
-                MAX3266X_MSG("Final CB");
-                return wc_MXC_TPU_SHA_Final(&(info->hash.sha224->mxcCtx),
+                MAX3266X_MSG("SHA-224 Final CB: calling wc_MXC_TPU_SHA_Final");
+                ret = wc_MXC_TPU_SHA_Final(&(info->hash.sha224->mxcCtx),
                                                 info->hash.digest,
                                                 MXC_TPU_HASH_SHA224);
+                MAX3266X_MSG("SHA-224 Final CB: returned from wc_MXC_TPU_SHA_Final");
+                return ret;
             }
             break; /* Break Out and Return Error */
     #endif
@@ -181,16 +191,20 @@ int wc_MxcShaCryptoCb(wc_CryptoInfo* info)
             MAX3266X_MSG("SHA-256 CB:");
             /* Update Case */
             if (info->hash.in != NULL && info->hash.digest == NULL) {
-                MAX3266X_MSG("Update CB");
-                return wc_MXC_TPU_SHA_Update(&(info->hash.sha256->mxcCtx),
+                MAX3266X_MSG("SHA-256 Update CB: calling wc_MXC_TPU_SHA_Update");
+                ret = wc_MXC_TPU_SHA_Update(&(info->hash.sha256->mxcCtx),
                                             info->hash.in, info->hash.inSz);
+                MAX3266X_MSG("SHA-256 Update CB: returned from wc_MXC_TPU_SHA_Update");
+                return ret;
             }
             /* Sha 256 Final Case */
             if (info->hash.in == NULL && info->hash.digest != NULL) {
-                MAX3266X_MSG("Final CB");
-                return wc_MXC_TPU_SHA_Final(&(info->hash.sha256->mxcCtx),
+                MAX3266X_MSG("SHA-256 Final CB: calling wc_MXC_TPU_SHA_Final");
+                ret = wc_MXC_TPU_SHA_Final(&(info->hash.sha256->mxcCtx),
                                                 info->hash.digest,
                                                 MXC_TPU_HASH_SHA256);
+                MAX3266X_MSG("SHA-256 Final CB: returned from wc_MXC_TPU_SHA_Final");
+                return ret;
             }
             break; /* Break Out and Return Error */
     #endif
@@ -199,16 +213,20 @@ int wc_MxcShaCryptoCb(wc_CryptoInfo* info)
             MAX3266X_MSG("SHA-384 CB:");
             /* Update Case */
             if (info->hash.in != NULL && info->hash.digest == NULL) {
-                MAX3266X_MSG("Update CB");
-                return wc_MXC_TPU_SHA_Update(&(info->hash.sha384->mxcCtx),
+                MAX3266X_MSG("SHA-384 Update CB: calling wc_MXC_TPU_SHA_Update");
+                ret = wc_MXC_TPU_SHA_Update(&(info->hash.sha384->mxcCtx),
                                             info->hash.in, info->hash.inSz);
+                MAX3266X_MSG("SHA-384 Update CB: returned from wc_MXC_TPU_SHA_Update");
+                return ret;
             }
             /* Sha 384 Final Case */
             if (info->hash.in == NULL && info->hash.digest != NULL) {
-                MAX3266X_MSG("Final CB");
-                return wc_MXC_TPU_SHA_Final(&(info->hash.sha384->mxcCtx),
+                MAX3266X_MSG("SHA-384 Final CB: calling wc_MXC_TPU_SHA_Final");
+                ret = wc_MXC_TPU_SHA_Final(&(info->hash.sha384->mxcCtx),
                                                 info->hash.digest,
                                                 MXC_TPU_HASH_SHA384);
+                MAX3266X_MSG("SHA-384 Final CB: returned from wc_MXC_TPU_SHA_Final");
+                return ret;
             }
             break; /* Break Out and Return Error */
     #endif
@@ -217,26 +235,33 @@ int wc_MxcShaCryptoCb(wc_CryptoInfo* info)
             MAX3266X_MSG("SHA-512 CB:");
             /* Update Case */
             if (info->hash.in != NULL && info->hash.digest == NULL) {
-                MAX3266X_MSG("Update CB");
-                return wc_MXC_TPU_SHA_Update(&(info->hash.sha512->mxcCtx),
+                MAX3266X_MSG("SHA-512 Update CB: calling wc_MXC_TPU_SHA_Update");
+                ret = wc_MXC_TPU_SHA_Update(&(info->hash.sha512->mxcCtx),
                                             info->hash.in, info->hash.inSz);
+                MAX3266X_MSG("SHA-512 Update CB: returned from wc_MXC_TPU_SHA_Update");
+                return ret;
             }
             /* Sha 512 Final Case */
             if (info->hash.in == NULL && info->hash.digest != NULL) {
-                MAX3266X_MSG("Final CB");
-                return wc_MXC_TPU_SHA_Final(&(info->hash.sha512->mxcCtx),
+                MAX3266X_MSG("SHA-512 Final CB: calling wc_MXC_TPU_SHA_Final");
+                ret = wc_MXC_TPU_SHA_Final(&(info->hash.sha512->mxcCtx),
                                                 info->hash.digest,
                                                 MXC_TPU_HASH_SHA512);
+                MAX3266X_MSG("SHA-512 Final CB: returned from wc_MXC_TPU_SHA_Final");
+                return ret;
             }
             break; /* Break Out and Return Error */
     #endif
         default:
             /* Hash type not supported */
+            MAX3266X_MSG("wc_MxcShaCryptoCb: hash type not supported");
             return WC_NO_ERR_TRACE(CRYPTOCB_UNAVAILABLE);
     }
     if (info->hash.inSz == 0) {
+        MAX3266X_MSG("wc_MxcShaCryptoCb: inSz is 0, returning success");
         return 0; /* Dont need to Update when Size is Zero */
     }
+    MAX3266X_MSG("wc_MxcShaCryptoCb: returning BAD_FUNC_ARG");
     return BAD_FUNC_ARG;
 }
 #endif /* MAX3266X_SHA_CB */
@@ -257,7 +282,10 @@ int wc_MxcCryptoCb(int devIdArg, wc_CryptoInfo* info, void* ctx)
     (void)ctx;
     (void)devIdArg;
 
+    MAX3266X_MSG("wc_MxcCryptoCb: ENTER");
+
     if (info == NULL) {
+        MAX3266X_MSG("wc_MxcCryptoCb: info is NULL");
         return BAD_FUNC_ARG;
     }
 
@@ -269,11 +297,13 @@ int wc_MxcCryptoCb(int devIdArg, wc_CryptoInfo* info, void* ctx)
         case WC_ALGO_TYPE_CIPHER:
             MAX3266X_MSG("Using MXC AES HW Callback:");
             ret = wc_MxcAesCryptoCb(info); /* Determine AES HW or SW */
+            MAX3266X_MSG("wc_MxcCryptoCb: AES callback returned");
             break;
 #ifdef MAX3266X_SHA_CB
         case WC_ALGO_TYPE_HASH:
             MAX3266X_MSG("Using MXC SHA HW Callback:");
             ret = wc_MxcShaCryptoCb(info); /* Determine SHA HW or SW */
+            MAX3266X_MSG("wc_MxcCryptoCb: SHA callback returned");
             break;
         case WC_ALGO_TYPE_COPY:
             MAX3266X_MSG("Using MXC Copy Callback:");
@@ -287,6 +317,7 @@ int wc_MxcCryptoCb(int devIdArg, wc_CryptoInfo* info, void* ctx)
                 switch (info->copy.type) {
                 #ifndef NO_SHA
                     case WC_HASH_TYPE_SHA:
+                        MAX3266X_MSG("wc_MxcCryptoCb: Copy SHA-1");
                         srcMxcCtx = &((wc_Sha*)info->copy.src)->mxcCtx;
                         dstMxcCtx = &((wc_Sha*)info->copy.dst)->mxcCtx;
                         srcDevId = &((wc_Sha*)info->copy.src)->devId;
@@ -296,6 +327,7 @@ int wc_MxcCryptoCb(int devIdArg, wc_CryptoInfo* info, void* ctx)
                 #endif
                 #ifdef WOLFSSL_SHA224
                     case WC_HASH_TYPE_SHA224:
+                        MAX3266X_MSG("wc_MxcCryptoCb: Copy SHA-224");
                         srcMxcCtx = &((wc_Sha224*)info->copy.src)->mxcCtx;
                         dstMxcCtx = &((wc_Sha224*)info->copy.dst)->mxcCtx;
                         srcDevId = &((wc_Sha224*)info->copy.src)->devId;
@@ -305,6 +337,7 @@ int wc_MxcCryptoCb(int devIdArg, wc_CryptoInfo* info, void* ctx)
                 #endif
                 #ifndef NO_SHA256
                     case WC_HASH_TYPE_SHA256:
+                        MAX3266X_MSG("wc_MxcCryptoCb: Copy SHA-256");
                         srcMxcCtx = &((wc_Sha256*)info->copy.src)->mxcCtx;
                         dstMxcCtx = &((wc_Sha256*)info->copy.dst)->mxcCtx;
                         srcDevId = &((wc_Sha256*)info->copy.src)->devId;
@@ -314,6 +347,7 @@ int wc_MxcCryptoCb(int devIdArg, wc_CryptoInfo* info, void* ctx)
                 #endif
                 #ifdef WOLFSSL_SHA384
                     case WC_HASH_TYPE_SHA384:
+                        MAX3266X_MSG("wc_MxcCryptoCb: Copy SHA-384");
                         srcMxcCtx = &((wc_Sha384*)info->copy.src)->mxcCtx;
                         dstMxcCtx = &((wc_Sha384*)info->copy.dst)->mxcCtx;
                         srcDevId = &((wc_Sha384*)info->copy.src)->devId;
@@ -323,6 +357,7 @@ int wc_MxcCryptoCb(int devIdArg, wc_CryptoInfo* info, void* ctx)
                 #endif
                 #ifdef WOLFSSL_SHA512
                     case WC_HASH_TYPE_SHA512:
+                        MAX3266X_MSG("wc_MxcCryptoCb: Copy SHA-512");
                         srcMxcCtx = &((wc_Sha512*)info->copy.src)->mxcCtx;
                         dstMxcCtx = &((wc_Sha512*)info->copy.dst)->mxcCtx;
                         srcDevId = &((wc_Sha512*)info->copy.src)->devId;
@@ -331,16 +366,21 @@ int wc_MxcCryptoCb(int devIdArg, wc_CryptoInfo* info, void* ctx)
                         break;
                 #endif
                     default:
+                        MAX3266X_MSG("wc_MxcCryptoCb: Copy - unknown hash type");
                         return WC_NO_ERR_TRACE(CRYPTOCB_UNAVAILABLE);
                 }
                 /* Software copy */
+                MAX3266X_MSG("wc_MxcCryptoCb: Copy - doing software copy");
                 savedDevId = *srcDevId;
                 XMEMCPY(info->copy.dst, info->copy.src, copySize);
                 *dstDevId = savedDevId;
                 /* Hardware copy - handles shallow copy from XMEMCPY */
+                MAX3266X_MSG("wc_MxcCryptoCb: Copy - calling wc_MXC_TPU_SHA_Copy");
                 ret = wc_MXC_TPU_SHA_Copy(srcMxcCtx, dstMxcCtx);
+                MAX3266X_MSG("wc_MxcCryptoCb: Copy - returned from wc_MXC_TPU_SHA_Copy");
             }
             else {
+                MAX3266X_MSG("wc_MxcCryptoCb: Copy - not a hash algo");
                 ret = WC_NO_ERR_TRACE(CRYPTOCB_UNAVAILABLE);
             }
             break;
@@ -354,6 +394,7 @@ int wc_MxcCryptoCb(int devIdArg, wc_CryptoInfo* info, void* ctx)
                 switch (info->free.type) {
                 #ifndef NO_SHA
                     case WC_HASH_TYPE_SHA:
+                        MAX3266X_MSG("wc_MxcCryptoCb: Free SHA-1");
                         dstMxcCtx = &((wc_Sha*)info->free.obj)->mxcCtx;
                         dstDevId = &((wc_Sha*)info->free.obj)->devId;
                         copySize = sizeof(wc_Sha);
@@ -361,6 +402,7 @@ int wc_MxcCryptoCb(int devIdArg, wc_CryptoInfo* info, void* ctx)
                 #endif
                 #ifdef WOLFSSL_SHA224
                     case WC_HASH_TYPE_SHA224:
+                        MAX3266X_MSG("wc_MxcCryptoCb: Free SHA-224");
                         dstMxcCtx = &((wc_Sha224*)info->free.obj)->mxcCtx;
                         dstDevId = &((wc_Sha224*)info->free.obj)->devId;
                         copySize = sizeof(wc_Sha224);
@@ -368,6 +410,7 @@ int wc_MxcCryptoCb(int devIdArg, wc_CryptoInfo* info, void* ctx)
                 #endif
                 #ifndef NO_SHA256
                     case WC_HASH_TYPE_SHA256:
+                        MAX3266X_MSG("wc_MxcCryptoCb: Free SHA-256");
                         dstMxcCtx = &((wc_Sha256*)info->free.obj)->mxcCtx;
                         dstDevId = &((wc_Sha256*)info->free.obj)->devId;
                         copySize = sizeof(wc_Sha256);
@@ -375,6 +418,7 @@ int wc_MxcCryptoCb(int devIdArg, wc_CryptoInfo* info, void* ctx)
                 #endif
                 #ifdef WOLFSSL_SHA384
                     case WC_HASH_TYPE_SHA384:
+                        MAX3266X_MSG("wc_MxcCryptoCb: Free SHA-384");
                         dstMxcCtx = &((wc_Sha384*)info->free.obj)->mxcCtx;
                         dstDevId = &((wc_Sha384*)info->free.obj)->devId;
                         copySize = sizeof(wc_Sha384);
@@ -382,22 +426,28 @@ int wc_MxcCryptoCb(int devIdArg, wc_CryptoInfo* info, void* ctx)
                 #endif
                 #ifdef WOLFSSL_SHA512
                     case WC_HASH_TYPE_SHA512:
+                        MAX3266X_MSG("wc_MxcCryptoCb: Free SHA-512");
                         dstMxcCtx = &((wc_Sha512*)info->free.obj)->mxcCtx;
                         dstDevId = &((wc_Sha512*)info->free.obj)->devId;
                         copySize = sizeof(wc_Sha512);
                         break;
                 #endif
                     default:
+                        MAX3266X_MSG("wc_MxcCryptoCb: Free - unknown hash type");
                         return WC_NO_ERR_TRACE(CRYPTOCB_UNAVAILABLE);
                 }
                 /* Hardware free */
+                MAX3266X_MSG("wc_MxcCryptoCb: Free - calling wc_MXC_TPU_SHA_Free");
                 wc_MXC_TPU_SHA_Free(dstMxcCtx);
                 /* Software free */
+                MAX3266X_MSG("wc_MxcCryptoCb: Free - doing software cleanup");
                 *dstDevId = INVALID_DEVID;
                 ForceZero(info->free.obj, copySize);
                 ret = 0;
+                MAX3266X_MSG("wc_MxcCryptoCb: Free - done");
             }
             else {
+                MAX3266X_MSG("wc_MxcCryptoCb: Free - not a hash algo");
                 ret = WC_NO_ERR_TRACE(CRYPTOCB_UNAVAILABLE);
             }
             break;
@@ -408,6 +458,7 @@ int wc_MxcCryptoCb(int devIdArg, wc_CryptoInfo* info, void* ctx)
             ret = WC_NO_ERR_TRACE(CRYPTOCB_UNAVAILABLE);
     }
 
+    MAX3266X_MSG("wc_MxcCryptoCb: EXIT");
     return ret;
 }
 #endif
@@ -726,12 +777,15 @@ int wc_MxcCb_AesCbcDecrypt(Aes* aes, byte* out, const byte* in, word32 sz)
 
 int wc_MXC_TPU_SHA_Init(wc_MXC_Sha *hash)
 {
+    MAX3266X_MSG("wc_MXC_TPU_SHA_Init: ENTER");
     if (hash == NULL) {
+        MAX3266X_MSG("wc_MXC_TPU_SHA_Init: NULL pointer detected");
         return BAD_FUNC_ARG; /* Appropriate error handling for null argument */
     }
     hash->msg = NULL;
     hash->used = 0;
     hash->size = 0;
+    MAX3266X_MSG("wc_MXC_TPU_SHA_Init: EXIT success");
     return 0;
 }
 
@@ -743,19 +797,26 @@ int wc_MXC_TPU_SHA_Update(wc_MXC_Sha *hash, const unsigned char* data,
                             unsigned int size)
 {
     void *p;
+    MAX3266X_MSG("wc_MXC_TPU_SHA_Update: ENTER");
     /* Only update if size is not 0 */
     if (size == 0) {
+        MAX3266X_MSG("wc_MXC_TPU_SHA_Update: size is 0, returning success");
         return 0;
     }
     /* Check for NULL pointers After Size Check */
     if (hash == NULL || data == NULL) {
+        MAX3266X_MSG("wc_MXC_TPU_SHA_Update: NULL pointer detected");
         return BAD_FUNC_ARG;
     }
+    MAX3266X_MSG("wc_MXC_TPU_SHA_Update: checking buffer size");
     if (hash->size < hash->used+size) {
+        MAX3266X_MSG("wc_MXC_TPU_SHA_Update: need to resize buffer");
         if (hash->msg == NULL) {
+            MAX3266X_MSG("wc_MXC_TPU_SHA_Update: allocating new buffer");
             p = XMALLOC(hash->used+size, NULL, DYNAMIC_TYPE_TMP_BUFFER);
         }
         else {
+            MAX3266X_MSG("wc_MXC_TPU_SHA_Update: reallocating buffer");
             #ifdef WOLFSSL_NO_REALLOC
             p = XMALLOC(hash->used + size, NULL, DYNAMIC_TYPE_TMP_BUFFER);
             if (p != NULL) {
@@ -768,16 +829,21 @@ int wc_MXC_TPU_SHA_Update(wc_MXC_Sha *hash, const unsigned char* data,
             #endif
         }
         if (p == NULL) {
+            MAX3266X_MSG("wc_MXC_TPU_SHA_Update: allocation failed");
             return MEMORY_E;
         }
         hash->msg = p;
         hash->size = hash->used+size;
+        MAX3266X_MSG("wc_MXC_TPU_SHA_Update: buffer resized successfully");
     }
+    MAX3266X_MSG("wc_MXC_TPU_SHA_Update: copying data to buffer");
     XMEMCPY(hash->msg+hash->used, data, size);
     hash->used += size;
     if (hash->msg == NULL) {
+        MAX3266X_MSG("wc_MXC_TPU_SHA_Update: msg is NULL after copy");
         return BAD_FUNC_ARG;
     }
+    MAX3266X_MSG("wc_MXC_TPU_SHA_Update: EXIT success");
     return 0;
 }
 
@@ -785,33 +851,46 @@ int wc_MXC_TPU_SHA_GetHash(wc_MXC_Sha *hash, unsigned char* digest,
                                 MXC_TPU_HASH_TYPE algo)
 {
     int status;
+    MAX3266X_MSG("wc_MXC_TPU_SHA_GetHash: ENTER");
     if (hash == NULL || digest == NULL) {
+        MAX3266X_MSG("wc_MXC_TPU_SHA_GetHash: NULL pointer detected");
         return BAD_FUNC_ARG;
     }
+    MAX3266X_MSG("wc_MXC_TPU_SHA_GetHash: calling wc_MXC_TPU_SHA_GetDigest");
     status = wc_MXC_TPU_SHA_GetDigest(hash, digest, algo);
     /* True Case that msg is an empty string */
     if (status == 1) {
         /* Hardware cannot handle the case of an empty string */
         /* so in the case of this we will provide the hash via software */
+        MAX3266X_MSG("wc_MXC_TPU_SHA_GetHash: empty string case, returning 0");
         return 0;
     }
     /* False Case where msg needs to be processed */
     else if (status == 0) {
+        MAX3266X_MSG("wc_MXC_TPU_SHA_GetHash: acquiring mutex");
         status = wolfSSL_HwHashMutexLock(); /* Set Mutex */
         if (status != 0) { /* Mutex Call Check */
+            MAX3266X_MSG("wc_MXC_TPU_SHA_GetHash: mutex lock failed");
             return status;
         }
+        MAX3266X_MSG("wc_MXC_TPU_SHA_GetHash: mutex acquired, calling MXC_TPU_Init");
         MXC_TPU_Init(MXC_SYS_PERIPH_CLOCK_TPU);
+        MAX3266X_MSG("wc_MXC_TPU_SHA_GetHash: MXC_TPU_Init done, calling MXC_TPU_Hash_Config");
         MXC_TPU_Hash_Config(algo);
+        MAX3266X_MSG("wc_MXC_TPU_SHA_GetHash: MXC_TPU_Hash_Config done, calling MXC_TPU_Hash_SHA");
         status = MXC_TPU_Hash_SHA((const char *)hash->msg, algo, hash->size,
                                          (char *)digest);
+        MAX3266X_MSG("wc_MXC_TPU_SHA_GetHash: MXC_TPU_Hash_SHA returned");
         MAX3266X_MSG("SHA HW Acceleration Used");
+        MAX3266X_MSG("wc_MXC_TPU_SHA_GetHash: releasing mutex");
         wolfSSL_HwHashMutexUnLock(); /* Release Mutex */
+        MAX3266X_MSG("wc_MXC_TPU_SHA_GetHash: mutex released");
         if (wc_MXC_error(&status) != 0) {
             MAX3266X_MSG("SHA HW Error Occurred");
             return status;
         }
     }
+    MAX3266X_MSG("wc_MXC_TPU_SHA_GetHash: EXIT");
     /* Error Occurred */
     return status;
 }
@@ -822,33 +901,46 @@ int wc_MXC_TPU_SHA_Final(wc_MXC_Sha *hash, unsigned char* digest,
                                     MXC_TPU_HASH_TYPE algo)
 {
     int status;
+    MAX3266X_MSG("wc_MXC_TPU_SHA_Final: ENTER");
     if (hash == NULL || digest == NULL) {
+        MAX3266X_MSG("wc_MXC_TPU_SHA_Final: NULL pointer detected");
         return BAD_FUNC_ARG;
     }
+    MAX3266X_MSG("wc_MXC_TPU_SHA_Final: calling wc_MXC_TPU_SHA_GetHash");
     status = wc_MXC_TPU_SHA_GetHash(hash, digest, algo);
+    MAX3266X_MSG("wc_MXC_TPU_SHA_Final: wc_MXC_TPU_SHA_GetHash returned");
     /* Free hash->msg no matter result */
+    MAX3266X_MSG("wc_MXC_TPU_SHA_Final: freeing hash->msg");
     XFREE(hash->msg, NULL, DYNAMIC_TYPE_TMP_BUFFER);
     if (status != 0) {
+        MAX3266X_MSG("wc_MXC_TPU_SHA_Final: GetHash failed, returning error");
         return status;
     }
+    MAX3266X_MSG("wc_MXC_TPU_SHA_Final: calling wc_MXC_TPU_SHA_Init");
     status = wc_MXC_TPU_SHA_Init(hash);
     if (status != 0) {
+        MAX3266X_MSG("wc_MXC_TPU_SHA_Final: Init failed, returning error");
         return status;
     }
+    MAX3266X_MSG("wc_MXC_TPU_SHA_Final: EXIT success");
     return status;
 }
 
 /* Copies Struct values from SRC struct to DST struct */
 int wc_MXC_TPU_SHA_Copy(wc_MXC_Sha* src, wc_MXC_Sha* dst)
 {
+    MAX3266X_MSG("wc_MXC_TPU_SHA_Copy: ENTER");
     if (src == NULL || dst == NULL) {
+        MAX3266X_MSG("wc_MXC_TPU_SHA_Copy: NULL pointer detected");
         return BAD_FUNC_ARG;
     }
 
     /* Handle case where src has no data */
     if (src->msg == NULL || src->size == 0) {
+        MAX3266X_MSG("wc_MXC_TPU_SHA_Copy: src has no data");
         /* Free dst if it has different data, then zero it */
         if (dst->msg != NULL && dst->msg != src->msg) {
+            MAX3266X_MSG("wc_MXC_TPU_SHA_Copy: freeing dst");
             wc_MXC_TPU_SHA_Free(dst);
         }
         else {
@@ -856,11 +948,13 @@ int wc_MXC_TPU_SHA_Copy(wc_MXC_Sha* src, wc_MXC_Sha* dst)
             dst->used = 0;
             dst->size = 0;
         }
+        MAX3266X_MSG("wc_MXC_TPU_SHA_Copy: EXIT (src empty)");
         return 0;
     }
 
     /* Only free dst if it points to different memory than src */
     if (dst->msg != NULL && dst->msg != src->msg) {
+        MAX3266X_MSG("wc_MXC_TPU_SHA_Copy: freeing old dst buffer");
         wc_MXC_TPU_SHA_Free(dst);
     }
     else {
@@ -871,15 +965,19 @@ int wc_MXC_TPU_SHA_Copy(wc_MXC_Sha* src, wc_MXC_Sha* dst)
     }
 
     /* Allocate new buffer for dst */
+    MAX3266X_MSG("wc_MXC_TPU_SHA_Copy: allocating new dst buffer");
     dst->msg = (unsigned char*)XMALLOC(src->size, NULL,
                                         DYNAMIC_TYPE_TMP_BUFFER);
     if (dst->msg == NULL) {
+        MAX3266X_MSG("wc_MXC_TPU_SHA_Copy: allocation failed");
         return MEMORY_E;
     }
 
+    MAX3266X_MSG("wc_MXC_TPU_SHA_Copy: copying data");
     XMEMCPY(dst->msg, src->msg, src->used);
     dst->used = src->used;
     dst->size = src->size;
+    MAX3266X_MSG("wc_MXC_TPU_SHA_Copy: EXIT success");
     return 0;
 }
 
@@ -887,8 +985,10 @@ int wc_MXC_TPU_SHA_Copy(wc_MXC_Sha* src, wc_MXC_Sha* dst)
 /* returns void to match other wc_Sha*Free api */
 void wc_MXC_TPU_SHA_Free(wc_MXC_Sha* hash)
 {
+    MAX3266X_MSG("wc_MXC_TPU_SHA_Free: ENTER");
     /* Securely zero the buffer before freeing */
     if (hash->msg != NULL) {
+        MAX3266X_MSG("wc_MXC_TPU_SHA_Free: zeroing and freeing buffer");
         ForceZero(hash->msg, hash->size);
         XFREE(hash->msg, NULL, DYNAMIC_TYPE_TMP_BUFFER);
     }
@@ -896,6 +996,7 @@ void wc_MXC_TPU_SHA_Free(wc_MXC_Sha* hash)
     hash->msg = NULL;
     hash->used = 0;
     hash->size = 0;
+    MAX3266X_MSG("wc_MXC_TPU_SHA_Free: EXIT");
     return;
 }
 
@@ -904,41 +1005,52 @@ void wc_MXC_TPU_SHA_Free(wc_MXC_Sha* hash)
 int wc_MXC_TPU_SHA_GetDigest(wc_MXC_Sha *hash, unsigned char* digest,
                                         MXC_TPU_HASH_TYPE algo)
 {
+    MAX3266X_MSG("wc_MXC_TPU_SHA_GetDigest: ENTER");
     if (hash == NULL || digest == NULL) {
+        MAX3266X_MSG("wc_MXC_TPU_SHA_GetDigest: NULL pointer detected");
         return BAD_FUNC_ARG;
     }
     if (hash->msg == 0 && hash->size == 0) {
+        MAX3266X_MSG("wc_MXC_TPU_SHA_GetDigest: empty string case");
         switch (algo) {
             #ifndef NO_SHA
             case MXC_TPU_HASH_SHA1:
+                MAX3266X_MSG("wc_MXC_TPU_SHA_GetDigest: SHA1 empty digest");
                 XMEMCPY(digest, MXC_EMPTY_DIGEST_SHA1, WC_SHA_DIGEST_SIZE);
                 break;
             #endif /* NO_SHA */
             #ifdef WOLFSSL_SHA224
             case MXC_TPU_HASH_SHA224:
+                MAX3266X_MSG("wc_MXC_TPU_SHA_GetDigest: SHA224 empty digest");
                 XMEMCPY(digest, MXC_EMPTY_DIGEST_SHA224, WC_SHA224_DIGEST_SIZE);
                 break;
             #endif /* WOLFSSL_SHA224 */
             #ifndef NO_SHA256
             case MXC_TPU_HASH_SHA256:
+                MAX3266X_MSG("wc_MXC_TPU_SHA_GetDigest: SHA256 empty digest");
                 XMEMCPY(digest, MXC_EMPTY_DIGEST_SHA256, WC_SHA256_DIGEST_SIZE);
                 break;
             #endif /* NO_SHA256 */
             #ifdef WOLFSSL_SHA384
             case MXC_TPU_HASH_SHA384:
+                MAX3266X_MSG("wc_MXC_TPU_SHA_GetDigest: SHA384 empty digest");
                 XMEMCPY(digest, MXC_EMPTY_DIGEST_SHA384, WC_SHA384_DIGEST_SIZE);
                 break;
             #endif /* WOLFSSL_SHA384 */
             #ifdef WOLFSSL_SHA512
             case MXC_TPU_HASH_SHA512:
+                MAX3266X_MSG("wc_MXC_TPU_SHA_GetDigest: SHA512 empty digest");
                 XMEMCPY(digest, MXC_EMPTY_DIGEST_SHA512, WC_SHA512_DIGEST_SIZE);
                 break;
             #endif /* WOLFSSL_SHA512 */
             default:
+                MAX3266X_MSG("wc_MXC_TPU_SHA_GetDigest: unknown algo");
                 return BAD_FUNC_ARG;
         }
+        MAX3266X_MSG("wc_MXC_TPU_SHA_GetDigest: EXIT (empty=true)");
         return 1; /* True */
     }
+    MAX3266X_MSG("wc_MXC_TPU_SHA_GetDigest: EXIT (empty=false, needs HW)");
     return 0; /* False */
 }
 
