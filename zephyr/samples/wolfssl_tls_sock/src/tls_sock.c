@@ -31,6 +31,12 @@
 #define printf   printk
 #endif
 
+#include <errno.h>
+
+/* Helper to stringify macro expansion for debug */
+#define XSTR(x) STR(x)
+#define STR(x)  #x
+
 #define BUFFER_SIZE           2048
 #define STATIC_MEM_SIZE       (256*1024)
 #define MAX_SEND_SIZE         256
@@ -312,12 +318,21 @@ int wolfssl_server_accept_tcp(WOLFSSL* ssl, SOCKET_T* fd, SOCKET_T* acceptfd)
     word16        port = 443;
     struct sockaddr_in bind_addr;
 
+    printf("DEBUG: socket macro expands to: %s\n", XSTR(socket));
     sockfd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    printf("DEBUG: server socket() returned fd=%d, errno=%d\n",
+           (int)sockfd, errno);
     bind_addr.sin_family = AF_INET;
     bind_addr.sin_addr.s_addr = htonl(INADDR_ANY);
     bind_addr.sin_port = htons(port);
-    if (bind(sockfd, (struct sockaddr *)&bind_addr, sizeof(bind_addr)) != 0)
+    if (bind(sockfd, (struct sockaddr *)&bind_addr, sizeof(bind_addr)) != 0) {
+        printf("DEBUG: server bind() failed, errno=%d (%s)\n",
+               errno, strerror(errno));
         ret = -1;
+    }
+    else {
+        printf("DEBUG: server bind() succeeded\n");
+    }
 
     if (ret == 0) {
         *fd = sockfd;
@@ -410,12 +425,16 @@ int wolfssl_client_connect_tcp(WOLFSSL* ssl, SOCKET_T* fd)
     XMEMSET(&hints, 0, sizeof(hints));
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
-    if (getaddrinfo("192.0.2.1", "443", &hints, &res) != 0)
+    if (getaddrinfo("192.0.2.1", "443", &hints, &res) != 0) {
+        printf("DEBUG: client getaddrinfo() failed, errno=%d\n", errno);
         ret = -1;
+    }
 
     if (ret == 0) {
         printf("Client socket\n");
         sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+        printf("DEBUG: client socket() returned fd=%d, errno=%d\n",
+               (int)sockfd, errno);
         if (WOLFSSL_SOCKET_IS_INVALID(sockfd))
             ret = -1;
     }
@@ -424,8 +443,11 @@ int wolfssl_client_connect_tcp(WOLFSSL* ssl, SOCKET_T* fd)
         tcp_set_nonblocking(&sockfd);
 
         printf("Client Connect\n");
-        if (connect(sockfd, res->ai_addr, res->ai_addrlen) != 0)
+        if (connect(sockfd, res->ai_addr, res->ai_addrlen) != 0) {
+            printf("DEBUG: client connect() failed, errno=%d (%s)\n",
+                   errno, strerror(errno));
             ret = -1;
+        }
     }
 
     if (ret == 0) {
@@ -490,6 +512,21 @@ int main()
 #ifdef HAVE_FIPS
     wolfCrypt_SetCb_fips(myFipsCb);
 #endif
+    printf("DEBUG: KERNEL_VERSION_NUMBER=0x%x\n", KERNEL_VERSION_NUMBER);
+#ifdef CONFIG_NET_SOCKETS_POSIX_NAMES
+    printf("DEBUG: CONFIG_NET_SOCKETS_POSIX_NAMES is defined\n");
+#else
+    printf("DEBUG: CONFIG_NET_SOCKETS_POSIX_NAMES is NOT defined\n");
+#endif
+#ifdef CONFIG_POSIX_API
+    printf("DEBUG: CONFIG_POSIX_API is defined\n");
+#else
+    printf("DEBUG: CONFIG_POSIX_API is NOT defined\n");
+#endif
+    printf("DEBUG: 'socket' expands to: %s\n", XSTR(socket));
+    printf("DEBUG: 'bind' expands to: %s\n", XSTR(bind));
+    printf("DEBUG: 'close' expands to: %s\n", XSTR(close));
+
     wolfSSL_Init();
 #ifdef DEBUG_WOLFSSL
     wolfSSL_Debugging_ON();
