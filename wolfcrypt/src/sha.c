@@ -562,13 +562,6 @@ int wc_InitSha_ex(wc_Sha* sha, void* heap, int devId)
     sha->devCtx = NULL;
 #endif
 
-#ifdef MAX3266X_SHA_CB
-    ret = wc_MXC_TPU_SHA_Init(&(sha->mxcCtx));
-    if (ret != 0) {
-        return ret;
-    }
-#endif
-
 #ifdef WOLFSSL_USE_ESP32_CRYPT_HASH_HW
     if (sha->ctx.mode != ESP32_SHA_INIT) {
         /* it may be interesting to see old values during debugging */
@@ -1087,8 +1080,12 @@ void wc_ShaFree(wc_Sha* sha)
 #ifdef WOLFSSL_PIC32MZ_HASH
     wc_ShaPic32Free(sha);
 #endif
-#ifdef MAX3266X_SHA_CB
-    wc_MXC_TPU_SHA_Free(&(sha->mxcCtx));
+#if defined(WOLFSSL_HASH_KEEP)
+    if (sha->msg != NULL) {
+        ForceZero(sha->msg, sha->len);
+        XFREE(sha->msg, sha->heap, DYNAMIC_TYPE_TMP_BUFFER);
+        sha->msg = NULL;
+    }
 #endif
 #if defined(WOLFSSL_SE050) && defined(WOLFSSL_SE050_HASH)
     se050_hash_free(&sha->se050Ctx);
@@ -1195,10 +1192,13 @@ int wc_ShaCopy(wc_Sha* src, wc_Sha* dst)
     esp_sha_ctx_copy(src, dst);
 #endif
 
-#ifdef MAX3266X_SHA_CB
-    ret = wc_MXC_TPU_SHA_Copy(&(src->mxcCtx), &(dst->mxcCtx));
-    if (ret != 0) {
-        return ret;
+#if defined(WOLFSSL_HASH_KEEP)
+    if (src->msg != NULL) {
+        dst->msg = (byte*)XMALLOC(src->len, dst->heap,
+                                  DYNAMIC_TYPE_TMP_BUFFER);
+        if (dst->msg == NULL)
+            return MEMORY_E;
+        XMEMCPY(dst->msg, src->msg, src->len);
     }
 #endif
 
@@ -1218,6 +1218,14 @@ int wc_ShaCopy(wc_Sha* src, wc_Sha* dst)
           !defined(WOLFSSL_RENESAS_TSIP_CRYPTONLY) ||
           defined(NO_WOLFSSL_RENESAS_TSIP_CRYPT_HASH) */
 #endif /* !defined(WOLFSSL_TI_HASH) && !defined(WOLFSSL_IMXRT_DCP) */
+
+#ifdef WOLFSSL_HASH_KEEP
+int wc_Sha_Grow(wc_Sha* sha, const byte* in, int inSz)
+{
+    return _wc_Hash_Grow(&(sha->msg), &(sha->used), &(sha->len), in,
+                        inSz, sha->heap);
+}
+#endif
 
 #ifdef WOLFSSL_HASH_FLAGS
 int wc_ShaSetFlags(wc_Sha* sha, word32 flags)

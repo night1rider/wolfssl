@@ -175,9 +175,6 @@ struct wc_Sha {
     int    devId;
     void*  devCtx; /* generic crypto callback context */
 #endif
-#if defined(MAX3266X_SHA_CB) || defined(MAX3266X_SHA)
-    wc_MXC_Sha mxcCtx;
-#endif
 #ifdef WOLFSSL_IMXRT1170_CAAM
     caam_hash_ctx_t ctx;
     caam_handle_t hndl;
@@ -215,6 +212,9 @@ WOLFSSL_API void wc_ShaFree(wc_Sha* sha);
 
 WOLFSSL_API int wc_ShaGetHash(wc_Sha* sha, byte* hash);
 WOLFSSL_API int wc_ShaCopy(wc_Sha* src, wc_Sha* dst);
+#if defined(WOLFSSL_HASH_KEEP)
+WOLFSSL_API int wc_Sha_Grow(wc_Sha* sha, const byte* in, int inSz);
+#endif
 #if defined(OPENSSL_EXTRA) || defined(HAVE_CURL)
 WOLFSSL_API int wc_ShaTransform(wc_Sha* sha, const unsigned char* data);
 #endif
