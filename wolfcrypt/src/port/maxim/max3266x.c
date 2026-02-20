@@ -34,6 +34,7 @@
 #include <wolfssl/wolfcrypt/error-crypt.h>
 #include <wolfssl/wolfcrypt/logging.h>
 #include <wolfssl/wolfcrypt/port/maxim/max3266x.h>
+#include <wolfssl/wolfcrypt/hash.h>
 #ifdef NO_INLINE
     #include <wolfssl/wolfcrypt/misc.h>
 #else
@@ -85,39 +86,6 @@ int wc_MXC_TPU_Shutdown(void)
 }
 
 
-#if defined(MAX3266X_SHA) || defined(MAX3266X_SHA_CB)
-/* Local grow function to accumulate message data for one-shot TPU hashing. */
-/* Equivalent to _wc_Hash_Grow but local for inlining on embedded targets. */
-static int wc_MxcHashGrow(byte** msg, word32* used, word32* len,
-                           const byte* in, int inSz, void* heap)
-{
-    if (inSz == 0) {
-        return 0;
-    }
-    if (*len < *used + (word32)inSz) {
-        if (*msg == NULL) {
-            *msg = (byte*)XMALLOC(*used + inSz, heap,
-                                        DYNAMIC_TYPE_TMP_BUFFER);
-        }
-        else {
-            byte* pt = (byte*)XREALLOC(*msg, *used + inSz, heap,
-                                        DYNAMIC_TYPE_TMP_BUFFER);
-            if (pt == NULL) {
-                return MEMORY_E;
-            }
-            *msg = pt;
-        }
-        if (*msg == NULL) {
-            return MEMORY_E;
-        }
-        *len = *used + inSz;
-    }
-    XMEMCPY(*msg + *used, in, inSz);
-    *used += inSz;
-    return 0;
-}
-#endif /* MAX3266X_SHA || MAX3266X_SHA_CB */
-
 #ifdef WOLF_CRYPTO_CB
 int wc_MxcAesCryptoCb(wc_CryptoInfo* info)
 {
@@ -168,53 +136,71 @@ int wc_MxcAesCryptoCb(wc_CryptoInfo* info)
 
 #ifdef MAX3266X_SHA_CB
 
-/* Per-type callback case: Update grows buffer, Final computes hash. */
-/* Uses direct struct access to avoid pointer-to-pointer indirection. */
-#define MXC_SHA_CB_CASE(sha_ptr, algo_val)                              \
-    if (info->hash.in != NULL && info->hash.digest == NULL) {           \
-        MAX3266X_MSG("Update CB");                                      \
-        return wc_MxcHashGrow(&(sha_ptr)->msg, &(sha_ptr)->used,        \
-                    &(sha_ptr)->len, info->hash.in,                     \
-                    (int)info->hash.inSz, (sha_ptr)->heap);             \
-    }                                                                   \
-    if (info->hash.in == NULL && info->hash.digest != NULL) {           \
-        MAX3266X_MSG("Final CB");                                       \
-        return wc_MXC_TPU_SHA_Final(&(sha_ptr)->msg, &(sha_ptr)->used,  \
-                    &(sha_ptr)->len, (sha_ptr)->heap,                   \
-                    info->hash.digest, (algo_val));                     \
-    }                                                                   \
-    break
+/* Shared callback handler: Update grows buffer, Final computes hash. */
+static int wc_MxcShaCbDispatch(byte** msg, word32* used, word32* len,
+                                void* heap, const byte* in, word32 inSz,
+                                byte* digest, MXC_TPU_HASH_TYPE algo)
+{
+    if (in != NULL && digest == NULL) {
+        MAX3266X_MSG("Update CB");
+        return _wc_Hash_Grow(msg, used, len, in, (int)inSz, heap);
+    }
+    if (in == NULL && digest != NULL) {
+        MAX3266X_MSG("Final CB");
+        return wc_MXC_TPU_SHA_Final(msg, used, len, heap, digest, algo);
+    }
+    if (inSz == 0) {
+        return 0; /* Don't need to Update when Size is Zero */
+    }
+    return BAD_FUNC_ARG;
+}
 
 int wc_MxcShaCryptoCb(wc_CryptoInfo* info)
 {
     switch (info->hash.type) {
     #ifndef NO_SHA
         case WC_HASH_TYPE_SHA:
-            MXC_SHA_CB_CASE(info->hash.sha1, MXC_TPU_HASH_SHA1);
+            return wc_MxcShaCbDispatch(&info->hash.sha1->msg,
+                        &info->hash.sha1->used, &info->hash.sha1->len,
+                        info->hash.sha1->heap, info->hash.in,
+                        info->hash.inSz, info->hash.digest,
+                        MXC_TPU_HASH_SHA1);
     #endif
     #ifdef WOLFSSL_SHA224
         case WC_HASH_TYPE_SHA224:
-            MXC_SHA_CB_CASE(info->hash.sha224, MXC_TPU_HASH_SHA224);
+            return wc_MxcShaCbDispatch(&info->hash.sha224->msg,
+                        &info->hash.sha224->used, &info->hash.sha224->len,
+                        info->hash.sha224->heap, info->hash.in,
+                        info->hash.inSz, info->hash.digest,
+                        MXC_TPU_HASH_SHA224);
     #endif
     #ifndef NO_SHA256
         case WC_HASH_TYPE_SHA256:
-            MXC_SHA_CB_CASE(info->hash.sha256, MXC_TPU_HASH_SHA256);
+            return wc_MxcShaCbDispatch(&info->hash.sha256->msg,
+                        &info->hash.sha256->used, &info->hash.sha256->len,
+                        info->hash.sha256->heap, info->hash.in,
+                        info->hash.inSz, info->hash.digest,
+                        MXC_TPU_HASH_SHA256);
     #endif
     #ifdef WOLFSSL_SHA384
         case WC_HASH_TYPE_SHA384:
-            MXC_SHA_CB_CASE(info->hash.sha384, MXC_TPU_HASH_SHA384);
+            return wc_MxcShaCbDispatch(&info->hash.sha384->msg,
+                        &info->hash.sha384->used, &info->hash.sha384->len,
+                        info->hash.sha384->heap, info->hash.in,
+                        info->hash.inSz, info->hash.digest,
+                        MXC_TPU_HASH_SHA384);
     #endif
     #ifdef WOLFSSL_SHA512
         case WC_HASH_TYPE_SHA512:
-            MXC_SHA_CB_CASE(info->hash.sha512, MXC_TPU_HASH_SHA512);
+            return wc_MxcShaCbDispatch(&info->hash.sha512->msg,
+                        &info->hash.sha512->used, &info->hash.sha512->len,
+                        info->hash.sha512->heap, info->hash.in,
+                        info->hash.inSz, info->hash.digest,
+                        MXC_TPU_HASH_SHA512);
     #endif
         default:
             return WC_NO_ERR_TRACE(CRYPTOCB_UNAVAILABLE);
     }
-    if (info->hash.inSz == 0) {
-        return 0; /* Don't need to Update when Size is Zero */
-    }
-    return BAD_FUNC_ARG;
 }
 #endif /* MAX3266X_SHA_CB */
 
@@ -700,7 +686,7 @@ WOLFSSL_API int wc_ShaUpdate(wc_Sha* sha, const unsigned char* data,
     if (sha == NULL || (data == NULL && len > 0)) {
         return BAD_FUNC_ARG;
     }
-    return wc_MxcHashGrow(&sha->msg, &sha->used, &sha->len,
+    return _wc_Hash_Grow(&sha->msg, &sha->used, &sha->len,
                                         data, (int)len, sha->heap);
 }
 
@@ -773,7 +759,7 @@ WOLFSSL_API int wc_Sha224Update(wc_Sha224* sha224, const unsigned char* data,
     if (sha224 == NULL || (data == NULL && len > 0)) {
         return BAD_FUNC_ARG;
     }
-    return wc_MxcHashGrow(&sha224->msg, &sha224->used, &sha224->len,
+    return _wc_Hash_Grow(&sha224->msg, &sha224->used, &sha224->len,
                                         data, (int)len, sha224->heap);
 }
 
@@ -849,7 +835,7 @@ WOLFSSL_API int wc_Sha256Update(wc_Sha256* sha256, const unsigned char* data,
     if (sha256 == NULL || (data == NULL && len > 0)) {
         return BAD_FUNC_ARG;
     }
-    return wc_MxcHashGrow(&sha256->msg, &sha256->used, &sha256->len,
+    return _wc_Hash_Grow(&sha256->msg, &sha256->used, &sha256->len,
                                         data, (int)len, sha256->heap);
 }
 
@@ -925,7 +911,7 @@ WOLFSSL_API int wc_Sha384Update(wc_Sha384* sha384, const unsigned char* data,
     if (sha384 == NULL || (data == NULL && len > 0)) {
         return BAD_FUNC_ARG;
     }
-    return wc_MxcHashGrow(&sha384->msg, &sha384->used, &sha384->len,
+    return _wc_Hash_Grow(&sha384->msg, &sha384->used, &sha384->len,
                                         data, (int)len, sha384->heap);
 }
 
@@ -1001,7 +987,7 @@ WOLFSSL_API int wc_Sha512Update(wc_Sha512* sha512, const unsigned char* data,
     if (sha512 == NULL || (data == NULL && len > 0)) {
         return BAD_FUNC_ARG;
     }
-    return wc_MxcHashGrow(&sha512->msg, &sha512->used, &sha512->len,
+    return _wc_Hash_Grow(&sha512->msg, &sha512->used, &sha512->len,
                                         data, (int)len, sha512->heap);
 }
 
