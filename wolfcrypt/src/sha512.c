@@ -887,6 +887,8 @@ static int InitSha512_Family(wc_Sha512* sha512, void* heap, int devId,
 
 #ifdef WOLFSSL_HASH_KEEP
     sha512->msg  = NULL;
+    sha512->len  = 0;
+    sha512->used = 0;
 #endif
 
     /* call the initialization function pointed to by initfp */

@@ -561,7 +561,11 @@ int wc_InitSha_ex(wc_Sha* sha, void* heap, int devId)
     sha->devId = devId;
     sha->devCtx = NULL;
 #endif
-
+#ifdef WOLFSSL_HASH_KEEP
+    sha->msg  = NULL;
+    sha->len  = 0;
+    sha->used = 0;
+#endif
 
 #ifdef WOLFSSL_USE_ESP32_CRYPT_HASH_HW
     if (sha->ctx.mode != ESP32_SHA_INIT) {
