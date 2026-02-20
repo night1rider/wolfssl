@@ -1100,6 +1100,14 @@ void wc_ShaFree(wc_Sha* sha)
     DCPShaFree(sha);
 #endif
 
+#ifdef WOLFSSL_HASH_KEEP
+    if (sha->msg != NULL) {
+        ForceZero(sha->msg, sha->len);
+        XFREE(sha->msg, sha->heap, DYNAMIC_TYPE_TMP_BUFFER);
+        sha->msg = NULL;
+    }
+#endif
+
 #if defined(PSOC6_HASH_SHA1)
     wc_Psoc6_Sha_Free();
 #endif
@@ -1198,6 +1206,18 @@ int wc_ShaCopy(wc_Sha* src, wc_Sha* dst)
 #ifdef WOLFSSL_HASH_FLAGS
     dst->flags |= WC_HASH_FLAG_ISCOPY;
 #endif
+
+#if defined(WOLFSSL_HASH_KEEP)
+    if (src->msg != NULL) {
+        dst->msg = (byte*)XMALLOC(src->len, dst->heap,
+                                  DYNAMIC_TYPE_TMP_BUFFER);
+        if (dst->msg == NULL) {
+            return MEMORY_E;
+        }
+        XMEMCPY(dst->msg, src->msg, src->used);
+    }
+#endif
+
     return ret;
 }
 #endif /* WOLFSSL_RENESAS_RX64_HASH */
