@@ -654,7 +654,6 @@ void wc_MXC_TPU_SHA_Free(byte** msg, word32* used, word32* len, void* heap)
         return;
     }
     if (*msg != NULL) {
-        ForceZero(*msg, *len);
         XFREE(*msg, heap, DYNAMIC_TYPE_TMP_BUFFER);
         *msg = NULL;
     }

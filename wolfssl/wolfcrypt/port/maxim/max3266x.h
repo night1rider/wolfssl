@@ -317,6 +317,9 @@
                                                 unsigned int msgSz,
                                                 unsigned char* digest,
                                                 MXC_TPU_HASH_TYPE algo);
+    /* Free HASH_KEEP message buffer and reset fields */
+    WOLFSSL_LOCAL void wc_MXC_TPU_SHA_Free(byte** msg, word32* used,
+                                                word32* len, void* heap);
     /* Compute hash, free message buffer, and reset fields */
     WOLFSSL_LOCAL int wc_MXC_TPU_SHA_Final(unsigned char** msg,
                                                 unsigned int* used,
