@@ -85,6 +85,39 @@ int wc_MXC_TPU_Shutdown(void)
 }
 
 
+#if defined(MAX3266X_SHA) || defined(MAX3266X_SHA_CB)
+/* Local grow function to accumulate message data for one-shot TPU hashing. */
+/* Equivalent to _wc_Hash_Grow but local for inlining on embedded targets. */
+static int wc_MxcHashGrow(byte** msg, word32* used, word32* len,
+                           const byte* in, int inSz, void* heap)
+{
+    if (inSz == 0) {
+        return 0;
+    }
+    if (*len < *used + (word32)inSz) {
+        if (*msg == NULL) {
+            *msg = (byte*)XMALLOC(*used + inSz, heap,
+                                        DYNAMIC_TYPE_TMP_BUFFER);
+        }
+        else {
+            byte* pt = (byte*)XREALLOC(*msg, *used + inSz, heap,
+                                        DYNAMIC_TYPE_TMP_BUFFER);
+            if (pt == NULL) {
+                return MEMORY_E;
+            }
+            *msg = pt;
+        }
+        if (*msg == NULL) {
+            return MEMORY_E;
+        }
+        *len = *used + inSz;
+    }
+    XMEMCPY(*msg + *used, in, inSz);
+    *used += inSz;
+    return 0;
+}
+#endif /* MAX3266X_SHA || MAX3266X_SHA_CB */
+
 #ifdef WOLF_CRYPTO_CB
 int wc_MxcAesCryptoCb(wc_CryptoInfo* info)
 {
@@ -571,37 +604,6 @@ int wc_MxcCb_AesCbcDecrypt(Aes* aes, byte* out, const byte* in, word32 sz)
 #endif /* MAX3266X_AES */
 
 #if defined(MAX3266X_SHA) || defined(MAX3266X_SHA_CB)
-
-/* Local grow function to accumulate message data for one-shot TPU hashing. */
-/* Equivalent to _wc_Hash_Grow but local for inlining on embedded targets. */
-static int wc_MxcHashGrow(byte** msg, word32* used, word32* len,
-                           const byte* in, int inSz, void* heap)
-{
-    if (inSz == 0) {
-        return 0;
-    }
-    if (*len < *used + (word32)inSz) {
-        if (*msg == NULL) {
-            *msg = (byte*)XMALLOC(*used + inSz, heap,
-                                        DYNAMIC_TYPE_TMP_BUFFER);
-        }
-        else {
-            byte* pt = (byte*)XREALLOC(*msg, *used + inSz, heap,
-                                        DYNAMIC_TYPE_TMP_BUFFER);
-            if (pt == NULL) {
-                return MEMORY_E;
-            }
-            *msg = pt;
-        }
-        if (*msg == NULL) {
-            return MEMORY_E;
-        }
-        *len = *used + inSz;
-    }
-    XMEMCPY(*msg + *used, in, inSz);
-    *used += inSz;
-    return 0;
-}
 
 /* Check for empty message and provide pre-computed digest if so */
 /* Returns 1 if empty (digest filled), 0 if needs hardware processing */
