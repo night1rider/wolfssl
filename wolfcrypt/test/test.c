@@ -542,6 +542,186 @@ static int devId = INVALID_DEVID;
   #endif
 #endif
 
+/* for platforms that use id[] to pass key slot info to crypto callbacks */
+#ifdef WOLF_PRIVATE_KEY_ID
+
+/* Helper: allocate Aes then re-init with id[] for hardware key slot */
+static WC_MAYBE_UNUSED Aes* test_AesNew_Id(unsigned char* id, int idLen,
+                                            void* heap, int thisDevId,
+                                            int *result_code)
+{
+    int ret;
+    Aes* aes = wc_AesNew(heap, thisDevId, &ret);
+    if (aes != NULL) {
+        wc_AesFree(aes);
+        ret = wc_AesInit_Id(aes, id, idLen, heap, thisDevId);
+        if (ret != 0) {
+            XFREE(aes, heap, DYNAMIC_TYPE_AES);
+            aes = NULL;
+        }
+    }
+    if (result_code != NULL)
+        *result_code = ret;
+    return aes;
+}
+
+/* Per-mode AES test id[] and macros */
+#ifdef WC_TEST_AES_CBC_ID
+static unsigned char testAesCbcId[] = WC_TEST_AES_CBC_ID;
+static int testAesCbcIdLen = (int)sizeof(testAesCbcId);
+#define TEST_AES_CBC_INIT(aes, heap, id) \
+    wc_AesInit_Id((aes), testAesCbcId, testAesCbcIdLen, (heap), (id))
+#define TEST_AES_CBC_NEW(heap, id, ret) \
+    test_AesNew_Id(testAesCbcId, testAesCbcIdLen, (heap), (id), (ret))
+#else
+#define TEST_AES_CBC_INIT(aes, heap, id) wc_AesInit((aes), (heap), (id))
+#define TEST_AES_CBC_NEW(heap, id, ret)  wc_AesNew((heap), (id), (ret))
+#endif
+
+#ifdef WC_TEST_AES_GCM_ID
+static unsigned char testAesGcmId[] = WC_TEST_AES_GCM_ID;
+static int testAesGcmIdLen = (int)sizeof(testAesGcmId);
+#define TEST_AES_GCM_INIT(aes, heap, id) \
+    wc_AesInit_Id((aes), testAesGcmId, testAesGcmIdLen, (heap), (id))
+#define TEST_AES_GCM_NEW(heap, id, ret) \
+    test_AesNew_Id(testAesGcmId, testAesGcmIdLen, (heap), (id), (ret))
+#else
+#define TEST_AES_GCM_INIT(aes, heap, id) wc_AesInit((aes), (heap), (id))
+#define TEST_AES_GCM_NEW(heap, id, ret)  wc_AesNew((heap), (id), (ret))
+#endif
+
+/* RSA test id[] and macros — routes RSA key init through wc_InitRsaKey_Id
+ * so that wc_RsaPrivateKeyDecode triggers the SetKey callback to import
+ * the key to HSE hardware. */
+#if !defined(NO_RSA)
+#ifdef WC_TEST_RSA_PRIV_ID
+static unsigned char testRsaPrivId[] = WC_TEST_RSA_PRIV_ID;
+static int testRsaPrivIdLen = (int)sizeof(testRsaPrivId);
+#endif
+#ifdef WC_TEST_RSA_PUB_ID
+static unsigned char testRsaPubId[] = WC_TEST_RSA_PUB_ID;
+static int testRsaPubIdLen = (int)sizeof(testRsaPubId);
+#endif
+#endif /* !NO_RSA */
+
+/* CMAC init macro — uses wc_InitCmac_Id when id[] is available */
+#ifdef WC_TEST_CMAC_ID
+static unsigned char testCmacId[] = WC_TEST_CMAC_ID;
+static int testCmacIdLen = (int)sizeof(testCmacId);
+#define TEST_CMAC_INIT(cmac, key, keySz, type, unused, heap, id) \
+    wc_InitCmac_Id((cmac), (key), (keySz), (type), (unused), \
+                   testCmacId, testCmacIdLen, (heap), (id))
+#else
+#define TEST_CMAC_INIT(cmac, key, keySz, type, unused, heap, id) \
+    wc_InitCmac_ex((cmac), (key), (keySz), (type), (unused), (heap), (id))
+#endif
+
+/* ECC test id[] — routes ECC key init through wc_ecc_init_id
+ * so that wc_EccPrivateKeyDecode / wc_EccPublicKeyDecode triggers the
+ * SetKey callback to import the key to HSE hardware.
+ * HSE only supports P-256 (keySize=32) and P-521 (keySize=66). */
+#ifdef HAVE_ECC
+#ifdef WC_TEST_ECC_PAIR_P256_ID
+static unsigned char testEccPairP256Id[] = WC_TEST_ECC_PAIR_P256_ID;
+static int testEccPairP256IdLen = (int)sizeof(testEccPairP256Id);
+#endif
+#ifdef WC_TEST_ECC_PUB_P256_ID
+static unsigned char testEccPubP256Id[] = WC_TEST_ECC_PUB_P256_ID;
+static int testEccPubP256IdLen = (int)sizeof(testEccPubP256Id);
+#endif
+#ifdef WC_TEST_ECC_PAIR_P521_ID
+static unsigned char testEccPairP521Id[] = WC_TEST_ECC_PAIR_P521_ID;
+static int testEccPairP521IdLen = (int)sizeof(testEccPairP521Id);
+#endif
+#ifdef WC_TEST_ECC_PUB_P521_ID
+static unsigned char testEccPubP521Id[] = WC_TEST_ECC_PUB_P521_ID;
+static int testEccPubP521IdLen = (int)sizeof(testEccPubP521Id);
+#endif
+
+/* Helper: init ECC key with id[] for matching curve, else standard init */
+static WC_MAYBE_UNUSED int test_EccInit_Pair(ecc_key* key, int keySize,
+                                              void* heap, int thisDevId)
+{
+#ifdef WC_TEST_ECC_PAIR_P256_ID
+    if (keySize == 32)
+        return wc_ecc_init_id(key, testEccPairP256Id,
+                               testEccPairP256IdLen, heap, thisDevId);
+#endif
+#ifdef WC_TEST_ECC_PAIR_P521_ID
+    if (keySize == 66)
+        return wc_ecc_init_id(key, testEccPairP521Id,
+                               testEccPairP521IdLen, heap, thisDevId);
+#endif
+    (void)keySize;
+    return wc_ecc_init_ex(key, heap, thisDevId);
+}
+
+static WC_MAYBE_UNUSED int test_EccInit_Pub(ecc_key* key, int keySize,
+                                             void* heap, int thisDevId)
+{
+#ifdef WC_TEST_ECC_PUB_P256_ID
+    if (keySize == 32)
+        return wc_ecc_init_id(key, testEccPubP256Id,
+                               testEccPubP256IdLen, heap, thisDevId);
+#endif
+#ifdef WC_TEST_ECC_PUB_P521_ID
+    if (keySize == 66)
+        return wc_ecc_init_id(key, testEccPubP521Id,
+                               testEccPubP521IdLen, heap, thisDevId);
+#endif
+    (void)keySize;
+    return wc_ecc_init_ex(key, heap, thisDevId);
+}
+
+#define TEST_ECC_PAIR_INIT(key, keySize, heap, id) \
+    test_EccInit_Pair((key), (keySize), (heap), (id))
+#define TEST_ECC_PUB_INIT(key, keySize, heap, id) \
+    test_EccInit_Pub((key), (keySize), (heap), (id))
+
+/* Export ECC key to DER and reimport into an id[]-initialized key.
+ * Triggers the SetKey callback to import the key into hardware.
+ * srcKey: key with key material (e.g. from wc_ecc_make_key)
+ * dstKey: id[]-initialized key (target for import)
+ * Returns 0 on success. */
+static WC_MAYBE_UNUSED int test_EccKeyLoadDer(ecc_key* srcKey, ecc_key* dstKey)
+{
+    byte derBuf[ECC_BUFSIZE];
+    int derSz;
+    word32 idx = 0;
+
+    derSz = wc_EccKeyToDer(srcKey, derBuf, (word32)sizeof(derBuf));
+    if (derSz <= 0)
+        return derSz;
+
+    return wc_EccPrivateKeyDecode(derBuf, &idx, dstKey, (word32)derSz);
+}
+#endif /* HAVE_ECC */
+
+/* Fallback for modes without hardware support — use plain software init */
+#define TEST_AES_INIT(aes, heap, id)    wc_AesInit((aes), (heap), (id))
+#define TEST_AES_NEW(heap, id, ret)     wc_AesNew((heap), (id), (ret))
+
+#else /* !WOLF_PRIVATE_KEY_ID */
+
+#define TEST_AES_CBC_INIT(aes, heap, id) wc_AesInit((aes), (heap), (id))
+#define TEST_AES_CBC_NEW(heap, id, ret)  wc_AesNew((heap), (id), (ret))
+#define TEST_AES_GCM_INIT(aes, heap, id) wc_AesInit((aes), (heap), (id))
+#define TEST_AES_GCM_NEW(heap, id, ret)  wc_AesNew((heap), (id), (ret))
+#define TEST_AES_INIT(aes, heap, id)     wc_AesInit((aes), (heap), (id))
+#define TEST_AES_NEW(heap, id, ret)      wc_AesNew((heap), (id), (ret))
+#define TEST_CMAC_INIT(cmac, key, keySz, type, unused, heap, id) \
+    wc_InitCmac_ex((cmac), (key), (keySz), (type), (unused), (heap), (id))
+#endif
+
+#ifndef TEST_ECC_PAIR_INIT
+#define TEST_ECC_PAIR_INIT(key, keySize, heap, id) \
+    wc_ecc_init_ex((key), (heap), (id))
+#endif
+#ifndef TEST_ECC_PUB_INIT
+#define TEST_ECC_PUB_INIT(key, keySize, heap, id) \
+    wc_ecc_init_ex((key), (heap), (id))
+#endif
+
 #ifdef HAVE_WNR
     const char* wnrConfigFile = "wnr-example.conf";
 #endif
@@ -1062,7 +1242,7 @@ static WC_MAYBE_UNUSED Aes* wc_AesNew(void* heap, int thisDevId, int *result_cod
         ret = MEMORY_E;
     }
     else {
-        ret = wc_AesInit(aes, heap, thisDevId);
+        ret = TEST_AES_INIT(aes, heap, thisDevId);
         if (ret != 0) {
             XFREE(aes, heap, DYNAMIC_TYPE_AES);
             aes = NULL;
@@ -1095,7 +1275,12 @@ static WC_MAYBE_UNUSED RsaKey* wc_NewRsaKey(void* heap, int thisDevId, int *resu
         ret = MEMORY_E;
     }
     else {
+#ifdef WC_TEST_RSA_PRIV_ID
+        ret = wc_InitRsaKey_Id(key, testRsaPrivId, testRsaPrivIdLen,
+                                heap, thisDevId);
+#else
         ret = wc_InitRsaKey_ex(key, heap, thisDevId);
+#endif
         if (ret != 0) {
             XFREE(key, heap, DYNAMIC_TYPE_RSA);
             key = NULL;
@@ -11497,11 +11682,11 @@ EVP_TEST_END:
     WOLFSSL_ENTER("aesofb_test");
 
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_NO_MALLOC)
-    enc = wc_AesNew(HEAP_HINT, devId, &ret);
+    enc = TEST_AES_NEW(HEAP_HINT, devId, &ret);
     if (enc == NULL)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
     #ifdef HAVE_AES_DECRYPT
-    dec = wc_AesNew(HEAP_HINT, devId, &ret);
+    dec = TEST_AES_NEW(HEAP_HINT, devId, &ret);
     if (dec == NULL)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
     #endif
@@ -11510,11 +11695,11 @@ EVP_TEST_END:
     #ifdef HAVE_AES_DECRYPT
     XMEMSET(dec, 0, sizeof(Aes));
     #endif
-    ret = wc_AesInit(enc, HEAP_HINT, devId);
+    ret = TEST_AES_INIT(enc, HEAP_HINT, devId);
     if (ret != 0)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
     #ifdef HAVE_AES_DECRYPT
-    ret = wc_AesInit(dec, HEAP_HINT, devId);
+    ret = TEST_AES_INIT(dec, HEAP_HINT, devId);
     if (ret != 0)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
     #endif
@@ -11898,11 +12083,11 @@ EVP_TEST_END:
 #endif /* WOLFSSL_AES_256 */
 
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_NO_MALLOC)
-    enc = wc_AesNew(HEAP_HINT, devId, &ret);
+    enc = TEST_AES_NEW(HEAP_HINT, devId, &ret);
     if (enc == NULL)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
     #ifdef HAVE_AES_DECRYPT
-    dec = wc_AesNew(HEAP_HINT, devId, &ret);
+    dec = TEST_AES_NEW(HEAP_HINT, devId, &ret);
     if (dec == NULL)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
     #endif
@@ -11911,11 +12096,11 @@ EVP_TEST_END:
     #ifdef HAVE_AES_DECRYPT
     XMEMSET(dec, 0, sizeof(Aes));
     #endif
-    ret = wc_AesInit(enc, HEAP_HINT, devId);
+    ret = TEST_AES_INIT(enc, HEAP_HINT, devId);
     if (ret != 0)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
     #ifdef HAVE_AES_DECRYPT
-    ret = wc_AesInit(dec, HEAP_HINT, devId);
+    ret = TEST_AES_INIT(dec, HEAP_HINT, devId);
     if (ret != 0)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
     #endif
@@ -12197,11 +12382,11 @@ EVP_TEST_END:
 #endif /* WOLFSSL_AES_256 */
 
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_NO_MALLOC)
-    enc = wc_AesNew(HEAP_HINT, devId, &ret);
+    enc = TEST_AES_NEW(HEAP_HINT, devId, &ret);
     if (enc == NULL)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
 #ifdef HAVE_AES_DECRYPT
-    dec = wc_AesNew(HEAP_HINT, devId, &ret);
+    dec = TEST_AES_NEW(HEAP_HINT, devId, &ret);
     if (dec == NULL)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
 #endif
@@ -12210,11 +12395,11 @@ EVP_TEST_END:
     #ifdef HAVE_AES_DECRYPT
     XMEMSET(dec, 0, sizeof(Aes));
     #endif
-    ret = wc_AesInit(enc, HEAP_HINT, devId);
+    ret = TEST_AES_INIT(enc, HEAP_HINT, devId);
     if (ret != 0)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
     #ifdef HAVE_AES_DECRYPT
-    ret = wc_AesInit(dec, HEAP_HINT, devId);
+    ret = TEST_AES_INIT(dec, HEAP_HINT, devId);
     if (ret != 0)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
     #endif
@@ -12457,11 +12642,11 @@ EVP_TEST_END:
 #endif
 
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_NO_MALLOC)
-    enc = wc_AesNew(HEAP_HINT, devId, &ret);
+    enc = TEST_AES_NEW(HEAP_HINT, devId, &ret);
     if (enc == NULL)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
     #ifdef HAVE_AES_DECRYPT
-    dec = wc_AesNew(HEAP_HINT, devId, &ret);
+    dec = TEST_AES_NEW(HEAP_HINT, devId, &ret);
     if (dec == NULL)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
     #endif
@@ -12470,11 +12655,11 @@ EVP_TEST_END:
     #ifdef HAVE_AES_DECRYPT
     XMEMSET(dec, 0, sizeof(Aes));
     #endif
-    ret = wc_AesInit(enc, HEAP_HINT, devId);
+    ret = TEST_AES_INIT(enc, HEAP_HINT, devId);
     if (ret != 0)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
     #ifdef HAVE_AES_DECRYPT
-    ret = wc_AesInit(dec, HEAP_HINT, devId);
+    ret = TEST_AES_INIT(dec, HEAP_HINT, devId);
     if (ret != 0)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
     #endif
@@ -12609,11 +12794,11 @@ static wc_test_ret_t aes_key_size_test(void)
 #endif
 
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_NO_MALLOC)
-    aes = wc_AesNew(HEAP_HINT, devId, &ret);
+    aes = TEST_AES_NEW(HEAP_HINT, devId, &ret);
     if (aes == NULL)
         return WC_TEST_RET_ENC_EC(ret);
 #else
-    ret = wc_AesInit(aes, HEAP_HINT, devId);
+    ret = TEST_AES_INIT(aes, HEAP_HINT, devId);
     /* 0 check OK for FIPSv1 */
     if (ret != 0)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
@@ -15662,19 +15847,19 @@ WOLFSSL_TEST_SUBROUTINE wc_test_ret_t aes_ctr_test(void)
     WOLFSSL_ENTER("aes_ctr_test");
 
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_NO_MALLOC)
-    enc = wc_AesNew(HEAP_HINT, devId, &ret);
+    enc = TEST_AES_NEW(HEAP_HINT, devId, &ret);
     if (enc == NULL)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
-    dec = wc_AesNew(HEAP_HINT, devId, &ret);
+    dec = TEST_AES_NEW(HEAP_HINT, devId, &ret);
     if (dec == NULL)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
 #else
     XMEMSET(enc, 0, sizeof(Aes));
     XMEMSET(dec, 0, sizeof(Aes));
-    ret = wc_AesInit(enc, HEAP_HINT, devId);
+    ret = TEST_AES_INIT(enc, HEAP_HINT, devId);
     if (ret != 0)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
-    ret = wc_AesInit(dec, HEAP_HINT, devId);
+    ret = TEST_AES_INIT(dec, HEAP_HINT, devId);
     if (ret != 0)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
 #endif /* WOLFSSL_SMALL_STACK && !WOLFSSL_NO_MALLOC */
@@ -16030,11 +16215,11 @@ WOLFSSL_TEST_SUBROUTINE wc_test_ret_t aes_cbc_test(void)
     WOLFSSL_ENTER("aes_cbc_test");
 
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_NO_MALLOC)
-    enc = wc_AesNew(HEAP_HINT, devId, &ret);
+    enc = TEST_AES_CBC_NEW(HEAP_HINT, devId, &ret);
     if (enc == NULL)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
 #ifdef HAVE_AES_DECRYPT
-    dec = wc_AesNew(HEAP_HINT, devId, &ret);
+    dec = TEST_AES_CBC_NEW(HEAP_HINT, devId, &ret);
     if (dec == NULL)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
 #endif
@@ -16043,11 +16228,11 @@ WOLFSSL_TEST_SUBROUTINE wc_test_ret_t aes_cbc_test(void)
     #ifdef HAVE_AES_DECRYPT
     XMEMSET(dec, 0, sizeof(Aes));
     #endif
-    ret = wc_AesInit(enc, HEAP_HINT, devId);
+    ret = TEST_AES_CBC_INIT(enc, HEAP_HINT, devId);
     if (ret != 0)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
 #ifdef HAVE_AES_DECRYPT
-    ret = wc_AesInit(dec, HEAP_HINT, devId);
+    ret = TEST_AES_CBC_INIT(dec, HEAP_HINT, devId);
     if (ret != 0)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
 #endif
@@ -16436,20 +16621,20 @@ static wc_test_ret_t aes_ecb_direct_test(void)
 #endif
 
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_NO_MALLOC)
-    enc = wc_AesNew(HEAP_HINT, devId, &ret);
+    enc = TEST_AES_NEW(HEAP_HINT, devId, &ret);
     if (enc == NULL)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
 #ifdef HAVE_AES_DECRYPT
-    dec = wc_AesNew(HEAP_HINT, devId, &ret);
+    dec = TEST_AES_NEW(HEAP_HINT, devId, &ret);
     if (dec == NULL)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
 #endif
 #else
-    ret = wc_AesInit(enc, HEAP_HINT, devId);
+    ret = TEST_AES_INIT(enc, HEAP_HINT, devId);
     if (ret != 0)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
 #ifdef HAVE_AES_DECRYPT
-    ret = wc_AesInit(dec, HEAP_HINT, devId);
+    ret = TEST_AES_INIT(dec, HEAP_HINT, devId);
     if (ret != 0)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
 #endif
@@ -16611,11 +16796,11 @@ WOLFSSL_TEST_SUBROUTINE wc_test_ret_t aes192_test(void)
     WOLFSSL_ENTER("aes192_test");
 
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_NO_MALLOC)
-    enc = wc_AesNew(HEAP_HINT, devId, &ret);
+    enc = TEST_AES_CBC_NEW(HEAP_HINT, devId, &ret);
     if (enc == NULL)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
     #ifdef HAVE_AES_DECRYPT
-    dec = wc_AesNew(HEAP_HINT, devId, &ret);
+    dec = TEST_AES_CBC_NEW(HEAP_HINT, devId, &ret);
     if (dec == NULL)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
     #endif
@@ -16624,11 +16809,11 @@ WOLFSSL_TEST_SUBROUTINE wc_test_ret_t aes192_test(void)
     #ifdef HAVE_AES_DECRYPT
     XMEMSET(dec, 0, sizeof(Aes));
     #endif
-    ret = wc_AesInit(enc, HEAP_HINT, devId);
+    ret = TEST_AES_CBC_INIT(enc, HEAP_HINT, devId);
     if (ret != 0)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
     #ifdef HAVE_AES_DECRYPT
-    ret = wc_AesInit(dec, HEAP_HINT, devId);
+    ret = TEST_AES_CBC_INIT(dec, HEAP_HINT, devId);
     if (ret != 0)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
     #endif
@@ -16741,11 +16926,11 @@ WOLFSSL_TEST_SUBROUTINE wc_test_ret_t aes256_test(void)
     WOLFSSL_ENTER("aes256_test");
 
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_NO_MALLOC)
-    enc = wc_AesNew(HEAP_HINT, devId, &ret);
+    enc = TEST_AES_CBC_NEW(HEAP_HINT, devId, &ret);
     if (enc == NULL)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
     #ifdef HAVE_AES_DECRYPT
-    dec = wc_AesNew(HEAP_HINT, devId, &ret);
+    dec = TEST_AES_CBC_NEW(HEAP_HINT, devId, &ret);
     if (dec == NULL)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
     #endif
@@ -16754,11 +16939,11 @@ WOLFSSL_TEST_SUBROUTINE wc_test_ret_t aes256_test(void)
     #ifdef HAVE_AES_DECRYPT
     XMEMSET(dec, 0, sizeof(Aes));
     #endif
-    ret = wc_AesInit(enc, HEAP_HINT, devId);
+    ret = TEST_AES_CBC_INIT(enc, HEAP_HINT, devId);
     if (ret != 0)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
     #ifdef HAVE_AES_DECRYPT
-    ret = wc_AesInit(dec, HEAP_HINT, devId);
+    ret = TEST_AES_CBC_INIT(dec, HEAP_HINT, devId);
     if (ret != 0)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
     #endif
@@ -16920,19 +17105,19 @@ static wc_test_ret_t aesgcm_default_test_helper(byte* key, int keySz, byte* iv, 
     XMEMSET(resultP, 0, sizeof(resultP));
 
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_NO_MALLOC)
-    enc = wc_AesNew(HEAP_HINT, devId, &ret);
+    enc = TEST_AES_NEW(HEAP_HINT, devId, &ret);
     if (enc == NULL)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
-    dec = wc_AesNew(HEAP_HINT, devId, &ret);
+    dec = TEST_AES_NEW(HEAP_HINT, devId, &ret);
     if (dec == NULL)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
 #else
     XMEMSET(enc, 0, sizeof(Aes));
     XMEMSET(dec, 0, sizeof(Aes));
-    ret = wc_AesInit(enc, HEAP_HINT, devId);
+    ret = TEST_AES_INIT(enc, HEAP_HINT, devId);
     if (ret != 0)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
-    ret = wc_AesInit(dec, HEAP_HINT, devId);
+    ret = TEST_AES_INIT(dec, HEAP_HINT, devId);
     if (ret != 0)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
 #endif /* WOLFSSL_SMALL_STACK && !WOLFSSL_NO_MALLOC */
@@ -17371,17 +17556,17 @@ WOLFSSL_TEST_SUBROUTINE wc_test_ret_t aesgcm_test(void)
     XMEMSET(resultP, 0, sizeof(resultP));
 
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_NO_MALLOC)
-    enc = wc_AesNew(HEAP_HINT, devId, &ret);
+    enc = TEST_AES_GCM_NEW(HEAP_HINT, devId, &ret);
     if (enc == NULL)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
-    dec = wc_AesNew(HEAP_HINT, devId, &ret);
+    dec = TEST_AES_GCM_NEW(HEAP_HINT, devId, &ret);
     if (dec == NULL)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
 #else
-    ret = wc_AesInit(enc, HEAP_HINT, devId);
+    ret = TEST_AES_GCM_INIT(enc, HEAP_HINT, devId);
     if (ret != 0)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
-    ret = wc_AesInit(dec, HEAP_HINT, devId);
+    ret = TEST_AES_GCM_INIT(dec, HEAP_HINT, devId);
     if (ret != 0)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
 #endif
@@ -18238,7 +18423,7 @@ WOLFSSL_TEST_SUBROUTINE wc_test_ret_t gmac_test(void)
 #endif
 
     XMEMSET(gmac, 0, sizeof *gmac); /* clear context */
-    (void)wc_AesInit(&gmac->aes, HEAP_HINT, devId); /* Make sure devId updated */
+    (void)TEST_AES_GCM_INIT(&gmac->aes, HEAP_HINT, devId); /* Make sure devId updated */
     XMEMSET(tag, 0, sizeof(tag));
     wc_GmacSetKey(gmac, k1, sizeof(k1));
     wc_GmacUpdate(gmac, iv1, sizeof(iv1), a1, sizeof(a1), tag, sizeof(t1));
@@ -18385,13 +18570,13 @@ static wc_test_ret_t aesccm_256_test(void)
     byte atag[sizeof(exp_tag)];
 
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_NO_MALLOC)
-    Aes* aes = wc_AesNew(HEAP_HINT, devId, &ret);
+    Aes* aes = TEST_AES_NEW(HEAP_HINT, devId, &ret);
     if (aes == NULL) {
         ret = WC_TEST_RET_ENC_EC(ret);
     }
 #else
     Aes aes[1];
-    ret = wc_AesInit(aes, HEAP_HINT, devId);
+    ret = TEST_AES_INIT(aes, HEAP_HINT, devId);
 #endif
     if (ret == 0) {
         ret = wc_AesCcmSetKey(aes, in_key, sizeof(in_key));
@@ -18541,12 +18726,12 @@ static wc_test_ret_t aesccm_128_test(void)
     XMEMSET(p2, 0, sizeof(p2));
 
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_NO_MALLOC)
-    enc = wc_AesNew(HEAP_HINT, devId, &ret);
+    enc = TEST_AES_NEW(HEAP_HINT, devId, &ret);
     if (enc == NULL)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
 #else
     XMEMSET(enc, 0, sizeof(Aes));
-    ret = wc_AesInit(enc, HEAP_HINT, devId);
+    ret = TEST_AES_INIT(enc, HEAP_HINT, devId);
     if (ret != 0)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
 #endif /* WOLFSSL_SMALL_STACK && !WOLFSSL_NO_MALLOC */
@@ -18595,7 +18780,7 @@ static wc_test_ret_t aesccm_128_test(void)
     XMEMSET(iv2, 0, sizeof(iv2));
 
     wc_AesFree(enc);
-    ret = wc_AesInit(enc, HEAP_HINT, devId);
+    ret = TEST_AES_INIT(enc, HEAP_HINT, devId);
     if (ret != 0)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
 
@@ -23703,7 +23888,16 @@ WOLFSSL_TEST_SUBROUTINE wc_test_ret_t rsa_no_pad_test(void)
     ERROR_OUT(WC_TEST_RET_ENC_NC, exit_rsa_nopadding);
 #endif /* USE_CERT_BUFFERS */
 
+#if defined(WC_TEST_RSA_PRIV_ID)
+    {
+        unsigned char testRsaNoPadId[] = WC_TEST_RSA_PRIV_ID;
+        ret = wc_InitRsaKey_Id(key, testRsaNoPadId,
+                                (int)sizeof(testRsaNoPadId), HEAP_HINT,
+                                devId);
+    }
+#else
     ret = wc_InitRsaKey_ex(key, HEAP_HINT, devId);
+#endif
     if (ret != 0) {
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), exit_rsa_nopadding);
     }
@@ -25149,7 +25343,7 @@ WOLFSSL_TEST_SUBROUTINE wc_test_ret_t rsa_test(void)
     /* initialize stack structures */
     XMEMSET(&rng, 0, sizeof(rng));
 
-#if !defined(NO_ASN)
+#if !defined(NO_ASN) && !defined(WC_TEST_SKIP_RSA_PRIVATE_EXPORT)
     ret = rsa_decode_test(key);
     if (ret != 0)
         ERROR_OUT(ret, exit_rsa);
@@ -25206,7 +25400,16 @@ WOLFSSL_TEST_SUBROUTINE wc_test_ret_t rsa_test(void)
     ERROR_OUT(WC_TEST_RET_ENC_NC, exit_rsa);
 #endif /* USE_CERT_BUFFERS */
 
+#if defined(WC_TEST_RSA_PRIV_ID)
+    {
+        unsigned char testRsaMainId[] = WC_TEST_RSA_PRIV_ID;
+        ret = wc_InitRsaKey_Id(key, testRsaMainId,
+                                (int)sizeof(testRsaMainId), HEAP_HINT,
+                                devId);
+    }
+#else
     ret = wc_InitRsaKey_ex(key, HEAP_HINT, devId);
+#endif
     if (ret != 0)
         ERROR_OUT(WC_TEST_RET_ENC_EC(ret), exit_rsa);
 #ifndef NO_ASN
@@ -25429,7 +25632,8 @@ WOLFSSL_TEST_SUBROUTINE wc_test_ret_t rsa_test(void)
 #endif /* WOLFSSL_RSA_VERIFY_ONLY */
 
 #if !defined(HAVE_FIPS) && !defined(NO_ASN) \
-    && !defined(WOLFSSL_RSA_VERIFY_ONLY)
+    && !defined(WOLFSSL_RSA_VERIFY_ONLY) \
+    && !defined(WC_TEST_SKIP_RSA_PRIVATE_EXPORT)
     ret = rsa_export_key_test(key);
     if (ret != 0)
         goto exit_rsa;
@@ -34605,6 +34809,30 @@ static wc_test_ret_t ecc_test_curve_size(WC_RNG* rng, int keySize, int testVerif
 #endif /* HAVE_ECC_KEY_IMPORT */
 #endif /* HAVE_ECC_KEY_EXPORT */
 
+    /* Reload userA with id[] for hardware sign/verify (if supported).
+     * Exports to DER, re-inits with id[], decodes back (triggers SetKey). */
+#if defined(WC_TEST_ECC_PAIR_P256_ID) || defined(WC_TEST_ECC_PAIR_P521_ID)
+    {
+        byte derBuf[ECC_BUFSIZE];
+        int derSz;
+        word32 derIdx = 0;
+        int eccSz = wc_ecc_size(userA);
+
+        derSz = wc_EccKeyToDer(userA, derBuf, (word32)sizeof(derBuf));
+        if (derSz > 0) {
+            wc_ecc_free(userA);
+            XMEMSET(userA, 0, sizeof(*userA));
+            ret = TEST_ECC_PAIR_INIT(userA, eccSz, HEAP_HINT, devId);
+            if (ret != 0)
+                ERROR_OUT(WC_TEST_RET_ENC_EC(ret), done);
+            ret = wc_EccPrivateKeyDecode(derBuf, &derIdx, userA,
+                                         (word32)derSz);
+            if (ret != 0)
+                ERROR_OUT(WC_TEST_RET_ENC_EC(ret), done);
+        }
+    }
+#endif
+
     /* For KCAPI cannot sign using generated ECDH key */
 #if !defined(ECC_TIMING_RESISTANT) || (defined(ECC_TIMING_RESISTANT) && \
     !defined(WC_NO_RNG) && !defined(WOLFSSL_KCAPI_ECC))
@@ -34690,10 +34918,17 @@ static wc_test_ret_t ecc_test_curve_size(WC_RNG* rng, int keySize, int testVerif
 #if defined(HAVE_ECC_KEY_EXPORT) && !defined(WC_NO_RNG) && \
     !defined(WOLFSSL_ATECC508) && !defined(WOLFSSL_ATECC608A) && \
     !defined(WOLFSSL_KCAPI_ECC)
-    x = ECC_KEY_EXPORT_BUF_SIZE;
-    ret = wc_ecc_export_private_only(userA, exportBuf, &x);
-    if (ret != 0)
-        ERROR_OUT(WC_TEST_RET_ENC_EC(ret), done);
+    /* Skip private key export when key lives in hardware (id[] keys) —
+     * software key material is not available after HSE import */
+#ifdef WOLF_PRIVATE_KEY_ID
+    if (userA->idLen == 0)
+#endif
+    {
+        x = ECC_KEY_EXPORT_BUF_SIZE;
+        ret = wc_ecc_export_private_only(userA, exportBuf, &x);
+        if (ret != 0)
+            ERROR_OUT(WC_TEST_RET_ENC_EC(ret), done);
+    }
 #elif defined(HAVE_ECC_KEY_EXPORT)
     (void)exportBuf;
 #endif /* HAVE_ECC_KEY_EXPORT */
@@ -54068,12 +54303,17 @@ WOLFSSL_TEST_SUBROUTINE wc_test_ret_t cmac_test(void)
          i < sizeof(testCases)/sizeof(CMAC_Test_Case);
          i++, tc++) {
 
+#ifdef WC_TEST_SKIP_ZERO_LEN_CMAC
+        if (tc->mSz == 0)
+            continue;
+#endif
+
         XMEMSET(tag, 0, sizeof(tag));
         tagSz = WC_AES_BLOCK_SIZE;
 
 #if !defined(HAVE_FIPS) || \
     defined(HAVE_FIPS_VERSION) && (HAVE_FIPS_VERSION >= 3)
-        ret = wc_InitCmac_ex(cmac, tc->k, tc->kSz, tc->type, NULL, HEAP_HINT, devId);
+        ret = TEST_CMAC_INIT(cmac, tc->k, tc->kSz, tc->type, NULL, HEAP_HINT, devId);
 #else
         ret = wc_InitCmac(cmac, tc->k, tc->kSz, tc->type, NULL);
 #endif
@@ -54105,8 +54345,18 @@ WOLFSSL_TEST_SUBROUTINE wc_test_ret_t cmac_test(void)
         XMEMSET(tag, 0, sizeof(tag));
         tagSz = sizeof(tag);
 #if !defined(HAVE_FIPS) || FIPS_VERSION_GE(6, 0)
+    #if defined(WOLF_PRIVATE_KEY_ID) && defined(WC_TEST_CMAC_ID)
+        /* Pre-init with id[] so Generate uses HSE-aware cmac */
+        ret = TEST_CMAC_INIT(cmac, tc->k, tc->kSz, tc->type, NULL,
+                             HEAP_HINT, devId);
+        if (ret != 0)
+            ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
+        ret = wc_AesCmacGenerate_ex(cmac, tag, &tagSz, tc->m, tc->mSz,
+                               NULL, 0, HEAP_HINT, devId);
+    #else
         ret = wc_AesCmacGenerate_ex(cmac, tag, &tagSz, tc->m, tc->mSz,
                                tc->k, tc->kSz, NULL, devId);
+    #endif
 #else
         ret = wc_AesCmacGenerate(tag, &tagSz, tc->m, tc->mSz,
                                tc->k, tc->kSz);
@@ -54116,8 +54366,18 @@ WOLFSSL_TEST_SUBROUTINE wc_test_ret_t cmac_test(void)
         if (XMEMCMP(tag, tc->t, WC_AES_BLOCK_SIZE) != 0)
             ERROR_OUT(WC_TEST_RET_ENC_NC, out);
 #if !defined(HAVE_FIPS) || FIPS_VERSION_GE(6, 0)
+    #if defined(WOLF_PRIVATE_KEY_ID) && defined(WC_TEST_CMAC_ID)
+        /* Pre-init with id[] so Verify uses HSE-aware cmac */
+        ret = TEST_CMAC_INIT(cmac, tc->k, tc->kSz, tc->type, NULL,
+                             HEAP_HINT, devId);
+        if (ret != 0)
+            ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
+        ret = wc_AesCmacVerify_ex(cmac, tc->t, tc->tSz, tc->m, tc->mSz,
+                             NULL, 0, HEAP_HINT, devId);
+    #else
         ret = wc_AesCmacVerify_ex(cmac, tc->t, tc->tSz, tc->m, tc->mSz,
                              tc->k, tc->kSz, HEAP_HINT, devId);
+    #endif
 #else
         ret = wc_AesCmacVerify(tc->t, tc->tSz, tc->m, tc->mSz,
                              tc->k, tc->kSz);
@@ -54129,7 +54389,7 @@ WOLFSSL_TEST_SUBROUTINE wc_test_ret_t cmac_test(void)
         /* Test that keyless generate with init is the same */
         XMEMSET(tag, 0, sizeof(tag));
         tagSz = sizeof(tag);
-        ret = wc_InitCmac_ex(cmac, tc->k, tc->kSz, tc->type, NULL, HEAP_HINT, devId);
+        ret = TEST_CMAC_INIT(cmac, tc->k, tc->kSz, tc->type, NULL, HEAP_HINT, devId);
         if (ret != 0) {
             ERROR_OUT(WC_TEST_RET_ENC_EC(ret), out);
         }
@@ -55364,7 +55624,7 @@ static int myDecryptionFunc(wc_PKCS7* pkcs7, int encryptOID, byte* iv, int ivSz,
             ERROR_OUT(ALGO_ID_E, out);
     };
 
-    ret = wc_AesInit(aes, HEAP_HINT, devId);
+    ret = TEST_AES_CBC_INIT(aes, HEAP_HINT, devId);
     if (ret == 0) {
         ret = wc_AesSetKey(aes, key, (word32)keySz, iv, AES_DECRYPTION);
         if (ret == 0)

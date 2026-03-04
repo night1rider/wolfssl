@@ -557,6 +557,22 @@ int wc_FreeRsaKey(RsaKey* key)
         return BAD_FUNC_ARG;
     }
 
+#if defined(WOLF_CRYPTO_CB) && defined(WOLF_CRYPTO_CB_FREE)
+    #ifndef WOLF_CRYPTO_CB_FIND
+    if (key->devId != INVALID_DEVID)
+    #endif
+    {
+        ret = wc_CryptoCb_Free(key->devId, WC_ALGO_TYPE_PK,
+                               WC_PK_TYPE_RSA, key);
+        /* If callback wants standard free, it returns CRYPTOCB_UNAVAILABLE.
+         * Otherwise assume the callback handled cleanup. */
+        if (ret != WC_NO_ERR_TRACE(CRYPTOCB_UNAVAILABLE))
+            return ret;
+        /* fall-through to software cleanup */
+        ret = 0;
+    }
+#endif /* WOLF_CRYPTO_CB && WOLF_CRYPTO_CB_FREE */
+
     wc_RsaCleanup(key);
 
 #if defined(WOLFSSL_ASYNC_CRYPT) && defined(WC_ASYNC_ENABLE_RSA)
@@ -4422,6 +4438,39 @@ int wc_RsaFlattenPublicKey(const RsaKey* key, byte* e, word32* eSz, byte* n,
         return BAD_FUNC_ARG;
     }
 
+#if defined(WOLF_CRYPTO_CB) && defined(WOLF_CRYPTO_CB_EXPORT_KEY)
+#ifndef WOLF_CRYPTO_CB_FIND
+    if (key->devId != INVALID_DEVID)
+#endif
+    {
+        WC_DECLARE_VAR(tmpKey, RsaKey, 1, NULL);
+        WC_ALLOC_VAR(tmpKey, RsaKey, 1, key->heap);
+        if (!WC_VAR_OK(tmpKey)) {
+            return MEMORY_E;
+        }
+        XMEMSET(tmpKey, 0, sizeof(RsaKey));
+
+        ret = wc_InitRsaKey_ex(tmpKey, key->heap, INVALID_DEVID);
+        if (ret != 0) {
+            WC_FREE_VAR(tmpKey, key->heap);
+            return ret;
+        }
+
+        ret = wc_CryptoCb_ExportKey(key->devId, WC_PK_TYPE_RSA,
+                                     (void*)key, tmpKey);
+        if (ret == 0) {
+            /* Recursive call on software tmpKey (INVALID_DEVID) */
+            ret = wc_RsaFlattenPublicKey(tmpKey, e, eSz, n, nSz);
+        }
+        ForceZero(tmpKey, sizeof(RsaKey));
+        wc_FreeRsaKey(tmpKey);
+        WC_FREE_VAR(tmpKey, key->heap);
+        if (ret != WC_NO_ERR_TRACE(CRYPTOCB_UNAVAILABLE))
+            return ret;
+        /* fall through to software */
+    }
+#endif /* WOLF_CRYPTO_CB && WOLF_CRYPTO_CB_EXPORT_KEY */
+
     sz = mp_unsigned_bin_size(&key->e);
     if ((word32)sz > *eSz)
         return RSA_BUFFER_E;
@@ -4470,9 +4519,47 @@ int wc_RsaExportKey(const RsaKey* key,
                     byte* q, word32* qSz)
 {
     int ret = WC_NO_ERR_TRACE(BAD_FUNC_ARG);
+#if defined(WOLF_CRYPTO_CB) && defined(WOLF_CRYPTO_CB_EXPORT_KEY)
+    WC_DECLARE_VAR(tmpKey, RsaKey, 1, NULL);
+#endif
 
     if (key && e && eSz && n && nSz && d && dSz && p && pSz && q && qSz)
         ret = 0;
+
+#if defined(WOLF_CRYPTO_CB) && defined(WOLF_CRYPTO_CB_EXPORT_KEY)
+    if (ret == 0) {
+    #ifndef WOLF_CRYPTO_CB_FIND
+        if (key->devId != INVALID_DEVID)
+    #endif
+        {
+            WC_ALLOC_VAR(tmpKey, RsaKey, 1, key->heap);
+            if (!WC_VAR_OK(tmpKey)) {
+                return MEMORY_E;
+            }
+            XMEMSET(tmpKey, 0, sizeof(RsaKey));
+
+            ret = wc_InitRsaKey_ex(tmpKey, key->heap, INVALID_DEVID);
+            if (ret != 0) {
+                WC_FREE_VAR(tmpKey, key->heap);
+                return ret;
+            }
+
+            ret = wc_CryptoCb_ExportKey(key->devId, WC_PK_TYPE_RSA,
+                                         (void*)key, tmpKey);
+            if (ret == 0) {
+                /* Recursive call on software tmpKey (INVALID_DEVID) */
+                ret = wc_RsaExportKey(tmpKey, e, eSz, n, nSz,
+                                       d, dSz, p, pSz, q, qSz);
+            }
+            ForceZero(tmpKey, sizeof(RsaKey));
+            wc_FreeRsaKey(tmpKey);
+            WC_FREE_VAR(tmpKey, key->heap);
+            if (ret != WC_NO_ERR_TRACE(CRYPTOCB_UNAVAILABLE))
+                return ret;
+            ret = 0; /* fall through to software */
+        }
+    }
+#endif /* WOLF_CRYPTO_CB && WOLF_CRYPTO_CB_EXPORT_KEY */
 
     if (ret == 0)
         ret = RsaGetValue(&key->e, e, eSz);

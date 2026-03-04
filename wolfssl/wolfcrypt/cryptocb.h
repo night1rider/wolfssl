@@ -230,6 +230,10 @@ typedef struct wc_CryptoInfo {
                 word32      pubKeySz;
             } ecc_check;
             #endif
+            struct {
+                const ecc_key* key;
+                int*           keySize;
+            } ecc_get_size;
         #endif /* HAVE_ECC */
         #ifdef HAVE_CURVE25519
             struct {
@@ -514,6 +518,13 @@ typedef struct wc_CryptoInfo {
         int flags;              /* AES: direction (AES_ENCRYPTION/DECRYPTION) */
     } setkey;
 #endif /* WOLF_CRYPTO_CB_SETKEY */
+#ifdef WOLF_CRYPTO_CB_EXPORT_KEY
+    struct {                    /* uses wc_AlgoType=WC_ALGO_TYPE_EXPORT_KEY */
+        int type;               /* enum wc_PkType (WC_PK_TYPE_RSA, etc.) */
+        void* obj;              /* Hardware key (has devCtx/id[]) */
+        void* out;              /* Software key to fill (same type as obj) */
+    } export_key;
+#endif /* WOLF_CRYPTO_CB_EXPORT_KEY */
 #if defined(HAVE_HKDF) || defined(HAVE_CMAC_KDF)
     struct {
         int type; /* enum wc_KdfType */
@@ -614,6 +625,8 @@ WOLFSSL_LOCAL int wc_CryptoCb_EccVerify(const byte* sig, word32 siglen,
 
 WOLFSSL_LOCAL int wc_CryptoCb_EccCheckPrivKey(ecc_key* key, const byte* pubKey,
     word32 pubKeySz);
+
+WOLFSSL_LOCAL int wc_CryptoCb_EccGetSize(const ecc_key* key, int* keySize);
 #endif /* HAVE_ECC */
 
 #ifdef HAVE_CURVE25519
@@ -799,6 +812,10 @@ WOLFSSL_LOCAL int wc_CryptoCb_SetKey(int devId, int type, void* obj,
                                       void* aux, word32 auxSz,
                                       int flags);
 #endif /* WOLF_CRYPTO_CB_SETKEY */
+#ifdef WOLF_CRYPTO_CB_EXPORT_KEY
+WOLFSSL_LOCAL int wc_CryptoCb_ExportKey(int devId, int type,
+                                         void* obj, void* out);
+#endif /* WOLF_CRYPTO_CB_EXPORT_KEY */
 
 #endif /* WOLF_CRYPTO_CB */
 

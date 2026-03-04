@@ -90,6 +90,9 @@ static const char* GetAlgoTypeStr(int algo)
 #ifdef WOLF_CRYPTO_CB_SETKEY
         case WC_ALGO_TYPE_SETKEY: return "SetKey";
 #endif /* WOLF_CRYPTO_CB_SETKEY */
+#ifdef WOLF_CRYPTO_CB_EXPORT_KEY
+        case WC_ALGO_TYPE_EXPORT_KEY: return "ExportKey";
+#endif /* WOLF_CRYPTO_CB_EXPORT_KEY */
     }
     return NULL;
 }
@@ -297,6 +300,12 @@ void wc_CryptoCb_InfoString(wc_CryptoInfo* info)
             GetSetKeyTypeStr(info->setkey.type), info->setkey.keySz);
     }
 #endif /* WOLF_CRYPTO_CB_SETKEY */
+#ifdef WOLF_CRYPTO_CB_EXPORT_KEY
+    else if (info->algo_type == WC_ALGO_TYPE_EXPORT_KEY) {
+        printf("Crypto CB: %s Type=%d\n",
+            GetAlgoTypeStr(info->algo_type), info->export_key.type);
+    }
+#endif /* WOLF_CRYPTO_CB_EXPORT_KEY */
 #if (defined(HAVE_HKDF) && !defined(NO_HMAC)) || \
     defined(HAVE_CMAC_KDF)
     else if (info->algo_type == WC_ALGO_TYPE_KDF) {
@@ -787,6 +796,30 @@ int wc_CryptoCb_EccCheckPrivKey(ecc_key* key, const byte* pubKey,
     return wc_CryptoCb_TranslateErrorCode(ret);
 }
 #endif
+
+int wc_CryptoCb_EccGetSize(const ecc_key* key, int* keySize)
+{
+    int ret = WC_NO_ERR_TRACE(CRYPTOCB_UNAVAILABLE);
+    CryptoCb* dev;
+
+    if (key == NULL)
+        return ret;
+
+    /* locate registered callback */
+    dev = wc_CryptoCb_FindDevice(key->devId, WC_ALGO_TYPE_PK);
+    if (dev && dev->cb) {
+        wc_CryptoInfo cryptoInfo;
+        XMEMSET(&cryptoInfo, 0, sizeof(cryptoInfo));
+        cryptoInfo.algo_type = WC_ALGO_TYPE_PK;
+        cryptoInfo.pk.type = WC_PK_TYPE_EC_GET_SIZE;
+        cryptoInfo.pk.ecc_get_size.key = key;
+        cryptoInfo.pk.ecc_get_size.keySize = keySize;
+
+        ret = dev->cb(dev->devId, &cryptoInfo, dev->ctx);
+    }
+
+    return wc_CryptoCb_TranslateErrorCode(ret);
+}
 #endif /* HAVE_ECC */
 
 #ifdef HAVE_CURVE25519
@@ -2210,6 +2243,37 @@ int wc_CryptoCb_SetKey(int devId, int type, void* obj,
     return wc_CryptoCb_TranslateErrorCode(ret);
 }
 #endif /* WOLF_CRYPTO_CB_SETKEY */
+
+#ifdef WOLF_CRYPTO_CB_EXPORT_KEY
+/* Generic ExportKey callback for exporting key material from hardware.
+ * devId: Device ID for the registered callback
+ * type:  enum wc_PkType (WC_PK_TYPE_RSA, WC_PK_TYPE_ECDSA, etc.)
+ * obj:   Hardware key object (has devCtx, id[], etc.)
+ * out:   Software key object to fill (same type as obj, caller-allocated)
+ * The callback exports from hardware into the software key. The caller then
+ * uses normal software export functions on 'out' and frees it.
+ * Returns: 0 on success, CRYPTOCB_UNAVAILABLE if not handled, negative on error
+ */
+int wc_CryptoCb_ExportKey(int devId, int type, void* obj, void* out)
+{
+    int ret = WC_NO_ERR_TRACE(CRYPTOCB_UNAVAILABLE);
+    CryptoCb* dev;
+
+    dev = wc_CryptoCb_FindDevice(devId, WC_ALGO_TYPE_EXPORT_KEY);
+    if (dev && dev->cb) {
+        wc_CryptoInfo cryptoInfo;
+        XMEMSET(&cryptoInfo, 0, sizeof(cryptoInfo));
+        cryptoInfo.algo_type = WC_ALGO_TYPE_EXPORT_KEY;
+        cryptoInfo.export_key.type = type;
+        cryptoInfo.export_key.obj = obj;
+        cryptoInfo.export_key.out = out;
+
+        ret = dev->cb(dev->devId, &cryptoInfo, dev->ctx);
+    }
+
+    return wc_CryptoCb_TranslateErrorCode(ret);
+}
+#endif /* WOLF_CRYPTO_CB_EXPORT_KEY */
 
 #if defined(HAVE_CMAC_KDF)
 /* Crypto callback for NIST SP 800 56C two-step CMAC KDF. See software

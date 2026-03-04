@@ -133,6 +133,7 @@ int wc_InitCmac_ex(Cmac* cmac, const byte* key, word32 keySz,
         if (ret != WC_NO_ERR_TRACE(CRYPTOCB_UNAVAILABLE))
             return ret;
         /* fall-through when unavailable */
+        ret = 0;
     }
 #else
     (void)devId;
@@ -198,6 +199,209 @@ int wc_InitCmac(Cmac* cmac, const byte* key, word32 keySz,
     return wc_InitCmac_ex(cmac, key, keySz, type, unused, NULL, devId);
 }
 
+
+#ifdef WOLF_PRIVATE_KEY_ID
+/* returns 0 on success */
+int wc_InitCmac_Id(Cmac* cmac, const byte* key, word32 keySz,
+                   int type, void* unused, unsigned char* id, int len,
+                   void* heap, int devId)
+{
+    int ret = 0;
+#if defined(WOLFSSL_SE050) && defined(WOLFSSL_SE050_CRYPT)
+    byte useSW = 0;
+#endif
+
+    (void)unused;
+    (void)heap;
+
+    if (cmac == NULL || type != WC_CMAC_AES) {
+        return BAD_FUNC_ARG;
+    }
+
+#if defined(WOLFSSL_SE050) && defined(WOLFSSL_SE050_CRYPT)
+    useSW = cmac->useSWCrypt;
+#endif
+    XMEMSET(cmac, 0, sizeof(Cmac));
+
+    /* Set up type and id on the AES sub-struct early so the crypto callback
+     * can inspect cmac->aes.id[] to determine if the key is already loaded
+     * in hardware (e.g. HSE) and return 0 to skip software setup. */
+#if !defined(NO_AES) && defined(WOLFSSL_AES_DIRECT)
+    if (type == WC_CMAC_AES) {
+        cmac->type = WC_CMAC_AES;
+        ret = wc_AesInit_Id(&cmac->aes, id, len, heap, devId);
+        if (ret != 0)
+            return ret;
+    }
+#endif
+
+#ifdef WOLF_CRYPTO_CB
+    cmac->devId = devId;
+    #ifndef WOLF_CRYPTO_CB_FIND
+    if (devId != INVALID_DEVID)
+    #endif
+    {
+        cmac->devCtx = NULL;
+
+        ret = wc_CryptoCb_Cmac(cmac, key, keySz, NULL, 0, NULL, NULL,
+                type, unused);
+        if (ret != WC_NO_ERR_TRACE(CRYPTOCB_UNAVAILABLE))
+            return ret;
+        /* fall-through when unavailable */
+        ret = 0;
+    }
+#else
+    (void)devId;
+#endif
+
+    if (key == NULL || keySz == 0) {
+        return BAD_FUNC_ARG;
+    }
+
+    switch (type) {
+#if !defined(NO_AES) && defined(WOLFSSL_AES_DIRECT)
+    case WC_CMAC_AES:
+        /* type and AesInit_Id already done above for crypto callback */
+
+    #if defined(WOLFSSL_SE050) && defined(WOLFSSL_SE050_CRYPT)
+        cmac->useSWCrypt = useSW;
+        if (cmac->useSWCrypt == 1) {
+            cmac->aes.useSWCrypt = 1;
+        }
+    #endif
+
+        if (ret == 0) {
+            ret = wc_AesSetKey(&cmac->aes, key, keySz, NULL, AES_ENCRYPTION);
+        }
+
+        if (ret == 0) {
+            byte l[WC_AES_BLOCK_SIZE];
+
+            XMEMSET(l, 0, WC_AES_BLOCK_SIZE);
+#ifndef HAVE_SELFTEST
+            ret = wc_AesEncryptDirect(&cmac->aes, l, l);
+            if (ret == 0) {
+                ShiftAndXorRb(cmac->k1, l);
+                ShiftAndXorRb(cmac->k2, cmac->k1);
+                ForceZero(l, WC_AES_BLOCK_SIZE);
+            }
+#else
+            wc_AesEncryptDirect(&cmac->aes, l, l);
+            ShiftAndXorRb(cmac->k1, l);
+            ShiftAndXorRb(cmac->k2, cmac->k1);
+            ForceZero(l, WC_AES_BLOCK_SIZE);
+#endif
+        }
+        break;
+#endif /* !NO_AES && WOLFSSL_AES_DIRECT */
+    default:
+        return BAD_FUNC_ARG;
+    }
+
+    return ret;
+}
+
+
+/* returns 0 on success */
+int wc_InitCmac_Label(Cmac* cmac, const byte* key, word32 keySz,
+                      int type, void* unused, const char* label,
+                      void* heap, int devId)
+{
+    int ret = 0;
+#if defined(WOLFSSL_SE050) && defined(WOLFSSL_SE050_CRYPT)
+    byte useSW = 0;
+#endif
+
+    (void)unused;
+    (void)heap;
+
+    if (cmac == NULL || type != WC_CMAC_AES) {
+        return BAD_FUNC_ARG;
+    }
+
+#if defined(WOLFSSL_SE050) && defined(WOLFSSL_SE050_CRYPT)
+    useSW = cmac->useSWCrypt;
+#endif
+    XMEMSET(cmac, 0, sizeof(Cmac));
+
+    /* Set up type and label on the AES sub-struct early so the crypto callback
+     * can inspect cmac->aes to determine if the key is already loaded
+     * in hardware (e.g. HSE) and return 0 to skip software setup. */
+#if !defined(NO_AES) && defined(WOLFSSL_AES_DIRECT)
+    if (type == WC_CMAC_AES) {
+        cmac->type = WC_CMAC_AES;
+        ret = wc_AesInit_Label(&cmac->aes, label, heap, devId);
+        if (ret != 0)
+            return ret;
+    }
+#endif
+
+#ifdef WOLF_CRYPTO_CB
+    cmac->devId = devId;
+    #ifndef WOLF_CRYPTO_CB_FIND
+    if (devId != INVALID_DEVID)
+    #endif
+    {
+        cmac->devCtx = NULL;
+
+        ret = wc_CryptoCb_Cmac(cmac, key, keySz, NULL, 0, NULL, NULL,
+                type, unused);
+        if (ret != WC_NO_ERR_TRACE(CRYPTOCB_UNAVAILABLE))
+            return ret;
+        /* fall-through when unavailable */
+        ret = 0;
+    }
+#else
+    (void)devId;
+#endif
+
+    if (key == NULL || keySz == 0) {
+        return BAD_FUNC_ARG;
+    }
+
+    switch (type) {
+#if !defined(NO_AES) && defined(WOLFSSL_AES_DIRECT)
+    case WC_CMAC_AES:
+        /* type and AesInit_Label already done above for crypto callback */
+
+    #if defined(WOLFSSL_SE050) && defined(WOLFSSL_SE050_CRYPT)
+        cmac->useSWCrypt = useSW;
+        if (cmac->useSWCrypt == 1) {
+            cmac->aes.useSWCrypt = 1;
+        }
+    #endif
+
+        if (ret == 0) {
+            ret = wc_AesSetKey(&cmac->aes, key, keySz, NULL, AES_ENCRYPTION);
+        }
+
+        if (ret == 0) {
+            byte l[WC_AES_BLOCK_SIZE];
+
+            XMEMSET(l, 0, WC_AES_BLOCK_SIZE);
+#ifndef HAVE_SELFTEST
+            ret = wc_AesEncryptDirect(&cmac->aes, l, l);
+            if (ret == 0) {
+                ShiftAndXorRb(cmac->k1, l);
+                ShiftAndXorRb(cmac->k2, cmac->k1);
+                ForceZero(l, WC_AES_BLOCK_SIZE);
+            }
+#else
+            wc_AesEncryptDirect(&cmac->aes, l, l);
+            ShiftAndXorRb(cmac->k1, l);
+            ShiftAndXorRb(cmac->k2, cmac->k1);
+            ForceZero(l, WC_AES_BLOCK_SIZE);
+#endif
+        }
+        break;
+#endif /* !NO_AES && WOLFSSL_AES_DIRECT */
+    default:
+        return BAD_FUNC_ARG;
+    }
+
+    return ret;
+}
+#endif /* WOLF_PRIVATE_KEY_ID */
 
 
 int wc_CmacUpdate(Cmac* cmac, const byte* in, word32 inSz)
