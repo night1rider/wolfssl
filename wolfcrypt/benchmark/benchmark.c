@@ -5011,8 +5011,19 @@ static void bench_aescbc_internal(int useDeviceID,
 
     /* init keys */
     for (i = 0; i < BENCH_MAX_PENDING; i++) {
-        if ((ret = wc_AesInit(enc[i], HEAP_HINT,
-                                useDeviceID ? devId: INVALID_DEVID)) != 0) {
+    #if defined(WC_TEST_AES_CBC_ID)
+        if (useDeviceID) {
+            unsigned char benchAesCbcId[] = WC_TEST_AES_CBC_ID;
+            ret = wc_AesInit_Id(enc[i], benchAesCbcId,
+                                (int)sizeof(benchAesCbcId), HEAP_HINT, devId);
+        }
+        else
+    #endif
+        {
+            ret = wc_AesInit(enc[i], HEAP_HINT,
+                             useDeviceID ? devId : INVALID_DEVID);
+        }
+        if (ret != 0) {
             printf("AesInit failed at L%d, ret = %d\n", __LINE__, ret);
             goto exit;
         }
@@ -5080,8 +5091,18 @@ exit_aes_enc:
 
     /* init keys */
     for (i = 0; i < BENCH_MAX_PENDING; i++) {
-        ret = wc_AesInit(enc[i], HEAP_HINT,
-                         useDeviceID ? devId: INVALID_DEVID);
+    #if defined(WC_TEST_AES_CBC_ID)
+        if (useDeviceID) {
+            unsigned char benchAesCbcId[] = WC_TEST_AES_CBC_ID;
+            ret = wc_AesInit_Id(enc[i], benchAesCbcId,
+                                (int)sizeof(benchAesCbcId), HEAP_HINT, devId);
+        }
+        else
+    #endif
+        {
+            ret = wc_AesInit(enc[i], HEAP_HINT,
+                             useDeviceID ? devId : INVALID_DEVID);
+        }
         if (ret != 0) {
             printf("AesInit failed at L%d, ret = %d\n", __LINE__, ret);
             goto exit;
@@ -5202,8 +5223,19 @@ static void bench_aesgcm_internal(int useDeviceID,
 
     /* init keys */
     for (i = 0; i < BENCH_MAX_PENDING; i++) {
-        if ((ret = wc_AesInit(enc[i], HEAP_HINT,
-                        useDeviceID ? devId: INVALID_DEVID)) != 0) {
+    #if defined(WC_TEST_AES_GCM_ID)
+        if (useDeviceID) {
+            unsigned char benchAesGcmId[] = WC_TEST_AES_GCM_ID;
+            ret = wc_AesInit_Id(enc[i], benchAesGcmId,
+                                (int)sizeof(benchAesGcmId), HEAP_HINT, devId);
+        }
+        else
+    #endif
+        {
+            ret = wc_AesInit(enc[i], HEAP_HINT,
+                             useDeviceID ? devId : INVALID_DEVID);
+        }
+        if (ret != 0) {
             printf("AesInit failed at L%d, ret = %d\n", __LINE__, ret);
             goto exit;
         }
@@ -5287,8 +5319,19 @@ exit_aes_gcm:
 
     /* init keys */
     for (i = 0; i < BENCH_MAX_PENDING; i++) {
-        if ((ret = wc_AesInit(dec[i], HEAP_HINT,
-                        useDeviceID ? devId: INVALID_DEVID)) != 0) {
+    #if defined(WC_TEST_AES_GCM_ID)
+        if (useDeviceID) {
+            unsigned char benchAesGcmId[] = WC_TEST_AES_GCM_ID;
+            ret = wc_AesInit_Id(dec[i], benchAesGcmId,
+                                (int)sizeof(benchAesGcmId), HEAP_HINT, devId);
+        }
+        else
+    #endif
+        {
+            ret = wc_AesInit(dec[i], HEAP_HINT,
+                             useDeviceID ? devId : INVALID_DEVID);
+        }
+        if (ret != 0) {
             printf("AesInit failed at L%d, ret = %d\n", __LINE__, ret);
             goto exit;
         }
@@ -9094,6 +9137,16 @@ static void bench_cmac_helper(word32 keySz, const char* outMsg, int useDeviceID)
     do {
     #ifdef HAVE_FIPS
         ret = wc_InitCmac(&cmac, bench_key, keySz, WC_CMAC_AES, NULL);
+    #elif defined(WC_TEST_CMAC_ID)
+        if (useDeviceID) {
+            unsigned char benchCmacId[] = WC_TEST_CMAC_ID;
+            ret = wc_InitCmac_Id(&cmac, bench_key, keySz, WC_CMAC_AES, NULL,
+                benchCmacId, (int)sizeof(benchCmacId), HEAP_HINT, devId);
+        }
+        else {
+            ret = wc_InitCmac_ex(&cmac, bench_key, keySz, WC_CMAC_AES, NULL,
+                HEAP_HINT, INVALID_DEVID);
+        }
     #else
         ret = wc_InitCmac_ex(&cmac, bench_key, keySz, WC_CMAC_AES, NULL,
             HEAP_HINT, useDeviceID ? devId : INVALID_DEVID);
@@ -10159,8 +10212,17 @@ void bench_rsa(int useDeviceID)
     /* init keys */
     for (i = 0; i < BENCH_MAX_PENDING; i++) {
         /* setup an async context for each key */
+#if defined(WC_TEST_RSA_PRIV_ID)
+        {
+            unsigned char benchRsaPrivId[] = WC_TEST_RSA_PRIV_ID;
+            ret = wc_InitRsaKey_Id(rsaKey[i], benchRsaPrivId,
+                                    (int)sizeof(benchRsaPrivId), HEAP_HINT,
+                                    useDeviceID ? devId : INVALID_DEVID);
+        }
+#else
         ret = wc_InitRsaKey_ex(rsaKey[i], HEAP_HINT,
             useDeviceID ? devId : INVALID_DEVID);
+#endif
         if (ret < 0) {
             goto exit;
         }
@@ -12343,7 +12405,28 @@ void bench_ecc(int useDeviceID, int curveId)
     /* init keys */
     for (i = 0; i < BENCH_MAX_PENDING; i++) {
         /* setup an context for each key */
-        if ((ret = wc_ecc_init_ex(genKey[i], HEAP_HINT, deviceID)) < 0) {
+    #if defined(WC_TEST_ECC_PAIR_P256_ID) && !defined(NO_ECC256)
+        if (keySize == 32 && useDeviceID) {
+            unsigned char benchEccPairP256Id[] = WC_TEST_ECC_PAIR_P256_ID;
+            ret = wc_ecc_init_id(genKey[i], benchEccPairP256Id,
+                                  (int)sizeof(benchEccPairP256Id),
+                                  HEAP_HINT, deviceID);
+        }
+        else
+    #endif
+    #if defined(WC_TEST_ECC_PAIR_P521_ID) && defined(HAVE_ECC521)
+        if (keySize == 66 && useDeviceID) {
+            unsigned char benchEccPairP521Id[] = WC_TEST_ECC_PAIR_P521_ID;
+            ret = wc_ecc_init_id(genKey[i], benchEccPairP521Id,
+                                  (int)sizeof(benchEccPairP521Id),
+                                  HEAP_HINT, deviceID);
+        }
+        else
+    #endif
+        {
+            ret = wc_ecc_init_ex(genKey[i], HEAP_HINT, deviceID);
+        }
+        if (ret < 0) {
             goto exit;
         }
         ret = wc_ecc_make_key_ex(&gRng, keySize, genKey[i], curveId);
@@ -12424,6 +12507,49 @@ exit_ecdhe:
 #endif /* HAVE_ECC_DHE */
 
 #if !defined(NO_ASN) && defined(HAVE_ECC_SIGN)
+
+    /* If key has id[], reimport via DER to trigger SetKey for hardware.
+     * Done here (after ECDHE) so ECDHE can use the original SW key with dp. */
+#if defined(WOLF_PRIVATE_KEY_ID)
+    for (i = 0; i < BENCH_MAX_PENDING; i++) {
+        if (genKey[i]->idLen > 0) {
+            byte derBuf[ECC_BUFSIZE];
+            int derSz;
+            word32 derIdx = 0;
+            derSz = wc_EccKeyToDer(genKey[i], derBuf, (word32)sizeof(derBuf));
+            if (derSz > 0) {
+                wc_ecc_free(genKey[i]);
+                XMEMSET(genKey[i], 0, sizeof(ecc_key));
+            #if defined(WC_TEST_ECC_PAIR_P256_ID) && !defined(NO_ECC256)
+                if (keySize == 32) {
+                    unsigned char eccId[] = WC_TEST_ECC_PAIR_P256_ID;
+                    ret = wc_ecc_init_id(genKey[i], eccId,
+                                         (int)sizeof(eccId),
+                                         HEAP_HINT, deviceID);
+                }
+                else
+            #endif
+            #if defined(WC_TEST_ECC_PAIR_P521_ID) && defined(HAVE_ECC521)
+                if (keySize == 66) {
+                    unsigned char eccId[] = WC_TEST_ECC_PAIR_P521_ID;
+                    ret = wc_ecc_init_id(genKey[i], eccId,
+                                         (int)sizeof(eccId),
+                                         HEAP_HINT, deviceID);
+                }
+                else
+            #endif
+                {
+                    ret = wc_ecc_init_ex(genKey[i], HEAP_HINT, deviceID);
+                }
+                if (ret == 0)
+                    ret = wc_EccPrivateKeyDecode(derBuf, &derIdx, genKey[i],
+                                                 (word32)derSz);
+                if (ret < 0)
+                    goto exit;
+            }
+        }
+    }
+#endif /* WOLF_PRIVATE_KEY_ID */
 
     /* Init digest to sign */
     for (i = 0; i < BENCH_MAX_PENDING; i++) {

@@ -111,6 +111,17 @@ int wc_InitCmac_ex(Cmac* cmac,
                 const byte* key, word32 keySz,
                 int type, void* unused, void* heap, int devId);
 
+#ifdef WOLF_PRIVATE_KEY_ID
+WOLFSSL_API
+int wc_InitCmac_Id(Cmac* cmac, const byte* key, word32 keySz,
+                   int type, void* unused, unsigned char* id, int len,
+                   void* heap, int devId);
+WOLFSSL_API
+int wc_InitCmac_Label(Cmac* cmac, const byte* key, word32 keySz,
+                      int type, void* unused, const char* label,
+                      void* heap, int devId);
+#endif
+
 WOLFSSL_API
 int wc_CmacUpdate(Cmac* cmac,
                   const byte* in, word32 inSz);
