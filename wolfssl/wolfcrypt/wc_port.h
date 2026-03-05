@@ -302,7 +302,11 @@
         #endif
         #if KERNEL_VERSION_NUMBER >= 0x30100
             #include <zephyr/kernel.h>
-            #ifndef CONFIG_ARCH_POSIX
+            /* wolfSSL uses k_mutex / k_thread directly from kernel.h.
+             * Skip Zephyr POSIX pthread headers when picolibc is the
+             * C library: they redefine picolibc's internal lock types
+             * as struct k_mutex, causing conflicting-type errors. */
+            #if !defined(CONFIG_ARCH_POSIX) && !defined(CONFIG_PICOLIBC)
                 #ifdef __has_include
                     #if __has_include(<zephyr/posix/posix_types.h>)
                         #include <zephyr/posix/posix_types.h>
@@ -1526,7 +1530,9 @@ WOLFSSL_ABI WOLFSSL_API int wolfCrypt_Cleanup(void);
         #include <version.h>
     #endif
     #ifndef _POSIX_C_SOURCE
-        #if KERNEL_VERSION_NUMBER >= 0x30100
+        #ifdef CONFIG_ARCH_POSIX
+            #include <time.h>
+        #elif KERNEL_VERSION_NUMBER >= 0x30100
             #ifdef __has_include
                 #if __has_include(<zephyr/posix/time.h>)
                     #include <zephyr/posix/time.h>

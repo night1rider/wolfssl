@@ -1,0 +1,138 @@
+name: Zephyr v4.x tests
+
+# START OF COMMON SECTION
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+  workflow_dispatch:
+    inputs:
+      wolfssl-repo:
+        description: 'wolfSSL repo URL (e.g. https://github.com/night1rider/wolfssl)'
+        required: false
+      wolfssl-branch:
+        description: 'wolfSSL branch to test'
+        required: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+# END OF COMMON SECTION
+
+jobs:
+  run_test:
+    name: Zephyr ${{ matrix.config.zephyr-ref }} / ${{ matrix.config.board }}
+    strategy:
+      fail-fast: true
+      matrix:
+        config:
+          - zephyr-ref: v4.1.0
+            board: qemu_x86
+          - zephyr-ref: v4.1.0
+            board: native_sim
+          - zephyr-ref: v4.3.0
+            board: qemu_x86
+          - zephyr-ref: v4.3.0
+            board: native_sim
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/zephyrproject-rtos/zephyr-build:v0.28.7
+    timeout-minutes: 30
+    env:
+      WORKDIR: /tmp/zp-${{ matrix.config.zephyr-ref }}-${{ matrix.config.board }}
+    steps:
+      - name: Setup Zephyr workspace
+        run: |
+          echo "::group::Set wolfSSL repo and ref"
+          if [ -n "${{ inputs.wolfssl-repo }}" ]; then
+            REPO_URL="${{ inputs.wolfssl-repo }}"
+          else
+            REPO_URL="https://github.com/${{ github.repository_owner }}/wolfssl"
+          fi
+
+          if [ -n "${{ inputs.wolfssl-branch }}" ]; then
+            WOLF_REF="${{ inputs.wolfssl-branch }}"
+          else
+            WOLF_REF="${{ github.ref }}"
+          fi
+
+          REPO_BASE=$(echo "${REPO_URL}" | sed 's|/[^/]*$||')
+          echo "WOLFSSL_REPO_BASE=${REPO_BASE}" >> $GITHUB_ENV
+          echo "WOLFSSL_REF=${WOLF_REF}" >> $GITHUB_ENV
+          echo "Using repo: ${REPO_URL} ref: ${WOLF_REF}"
+          echo "::endgroup::"
+
+          echo "::group::Init west workspace"
+          west init --mr ${{ matrix.config.zephyr-ref }} ${{ env.WORKDIR }}
+          echo "::endgroup::"
+
+          echo "::group::Add wolfSSL to west.yml"
+          cd ${{ env.WORKDIR }}/zephyr
+          REF=$(echo "${WOLF_REF}" | sed -e 's/\//\\\//g')
+          REPO_BASE_ESC=$(echo "${REPO_BASE}" | sed -e 's/\//\\\//g')
+          sed -e "s/remotes:/remotes:\n    \- name: wolfssl\n      url\-base: ${REPO_BASE_ESC}/" -i west.yml
+          sed -e "s/projects:/projects:\n    \- name: wolfssl\n      path: modules\/crypto\/wolfssl\n      remote: wolfssl\n      revision: ${REF}/" -i west.yml
+          echo "::endgroup::"
+
+          echo "::group::Update west workspace"
+          cd ${{ env.WORKDIR }}
+          west update -n -o=--depth=1
+          echo "::endgroup::"
+
+          echo "::group::Export zephyr and install dependencies"
+          cd ${{ env.WORKDIR }}
+          west zephyr-export
+          python3 -m venv .venv
+          . .venv/bin/activate
+          pip install west
+          pip install -r zephyr/scripts/requirements.txt
+          echo "::endgroup::"
+
+      - name: Run wolfssl test
+        id: wolfssl-test
+        run: |
+          set -e
+          cd ${{ env.WORKDIR }}
+          . .venv/bin/activate
+          export ZEPHYR_BASE=${{ env.WORKDIR }}/zephyr
+          ./zephyr/scripts/twister -p ${{ matrix.config.board }} -T modules/crypto/wolfssl --test zephyr/samples/wolfssl_test/sample.crypto.wolfssl_test -vvv || { echo "FAILED: wolfssl_test"; exit 1; }
+          rm -rf zephyr/twister-out
+          ./zephyr/scripts/twister -p ${{ matrix.config.board }} -T modules/crypto/wolfssl --test zephyr/samples/wolfssl_test/sample.crypto.wolfssl_test_no_malloc -vvv || { echo "FAILED: wolfssl_test_no_malloc"; exit 1; }
+          rm -rf zephyr/twister-out
+
+      - name: Run wolfssl TLS sock test
+        id: wolfssl-tls-sock
+        run: |
+          set -e
+          cd ${{ env.WORKDIR }}
+          . .venv/bin/activate
+          export ZEPHYR_BASE=${{ env.WORKDIR }}/zephyr
+          ./zephyr/scripts/twister -p ${{ matrix.config.board }} -T modules/crypto/wolfssl --test zephyr/samples/wolfssl_tls_sock/sample.crypto.wolfssl_tls_sock -vvv || { echo "FAILED: wolfssl_tls_sock"; exit 1; }
+          rm -rf zephyr/twister-out
+          ./zephyr/scripts/twister -p ${{ matrix.config.board }} -T modules/crypto/wolfssl --test zephyr/samples/wolfssl_tls_sock/sample.crypto.wolfssl_tls_sock_no_malloc -vvv || { echo "FAILED: wolfssl_tls_sock_no_malloc"; exit 1; }
+          rm -rf zephyr/twister-out
+
+      - name: Run wolfssl TLS thread test
+        id: wolfssl-tls-thread
+        run: |
+          set -e
+          cd ${{ env.WORKDIR }}
+          . .venv/bin/activate
+          export ZEPHYR_BASE=${{ env.WORKDIR }}/zephyr
+          ./zephyr/scripts/twister -p ${{ matrix.config.board }} -T modules/crypto/wolfssl --test zephyr/samples/wolfssl_tls_thread/sample.crypto.wolfssl_tls_thread -vvv || { echo "FAILED: wolfssl_tls_thread"; exit 1; }
+          rm -rf zephyr/twister-out
+
+      - name: Zip failure logs
+        if: ${{ failure() && !env.ACT && (steps.wolfssl-test.outcome == 'failure' || steps.wolfssl-tls-sock.outcome == 'failure' || steps.wolfssl-tls-thread.outcome == 'failure') }}
+        run: |
+          cd ${{ env.WORKDIR }}
+          tar czf /tmp/logs.tar.gz zephyr/twister-out 2>/dev/null || true
+
+      - name: Upload failure logs
+        if: ${{ failure() && !env.ACT && (steps.wolfssl-test.outcome == 'failure' || steps.wolfssl-tls-sock.outcome == 'failure' || steps.wolfssl-tls-thread.outcome == 'failure') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: zephyr-v4-logs-${{ matrix.config.zephyr-ref }}-${{ matrix.config.board }}
+          path: /tmp/logs.tar.gz
+          retention-days: 5
