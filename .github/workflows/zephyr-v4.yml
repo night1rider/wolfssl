@@ -35,7 +35,7 @@ jobs:
     # This should be a safe limit for the tests to run.
     timeout-minutes: 25
     env:
-      WORKDIR: /tmp/zephyrproject
+      WORKDIR: /tmp/zp-${{ matrix.config.zephyr-ref }}
     steps:
       - name: Setup Python venv
         run: |
