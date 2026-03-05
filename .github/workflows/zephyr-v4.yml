@@ -34,6 +34,8 @@ jobs:
       image: ghcr.io/zephyrproject-rtos/zephyr-build:v0.28.7
     # This should be a safe limit for the tests to run.
     timeout-minutes: 25
+    env:
+      WORKDIR: /tmp/zephyrproject
     steps:
       - name: Setup Python venv
         run: |
@@ -44,10 +46,10 @@ jobs:
         run: pip install west
 
       - name: Init west workspace
-        run: west init --mr ${{ matrix.config.zephyr-ref }} zephyr
+        run: west init --mr ${{ matrix.config.zephyr-ref }} ${{ env.WORKDIR }}
 
       - name: Update west.yml
-        working-directory: zephyr/zephyr
+        working-directory: ${{ env.WORKDIR }}/zephyr
         run: |
           if [ -n "${{ inputs.wolfssl-repo }}" ]; then
             REPO_URL="${{ inputs.wolfssl-repo }}"
@@ -66,20 +68,20 @@ jobs:
           sed -e "s/projects:/projects:\n    \- name: wolfssl\n      path: modules\/crypto\/wolfssl\n      remote: wolfssl\n      revision: ${REF}/" -i west.yml
 
       - name: Update west workspace
-        working-directory: zephyr
+        working-directory: ${{ env.WORKDIR }}
         run: west update -n -o=--depth=1
 
       - name: Export zephyr
-        working-directory: zephyr
+        working-directory: ${{ env.WORKDIR }}
         run: west zephyr-export
 
       - name: Install pip dependencies
-        working-directory: zephyr
+        working-directory: ${{ env.WORKDIR }}
         run: pip install -r zephyr/scripts/requirements.txt
 
       - name: Run wolfssl test
         id: wolfssl-test
-        working-directory: zephyr
+        working-directory: ${{ env.WORKDIR }}
         run: |
           ./zephyr/scripts/twister -T modules/crypto/wolfssl --test zephyr/samples/wolfssl_test/sample.crypto.wolfssl_test -vvv
           rm -rf zephyr/twister-out
@@ -88,7 +90,7 @@ jobs:
 
       - name: Run wolfssl TLS sock test
         id: wolfssl-tls-sock
-        working-directory: zephyr
+        working-directory: ${{ env.WORKDIR }}
         run: |
           ./zephyr/scripts/twister -T modules/crypto/wolfssl --test zephyr/samples/wolfssl_tls_sock/sample.crypto.wolfssl_tls_sock -vvv
           rm -rf zephyr/twister-out
@@ -97,20 +99,21 @@ jobs:
 
       - name: Run wolfssl TLS thread test
         id: wolfssl-tls-thread
-        working-directory: zephyr
+        working-directory: ${{ env.WORKDIR }}
         run: |
           ./zephyr/scripts/twister -T modules/crypto/wolfssl --test zephyr/samples/wolfssl_tls_thread/sample.crypto.wolfssl_tls_thread -vvv
           rm -rf zephyr/twister-out
 
       - name: Zip failure logs
         if: ${{ failure() && (steps.wolfssl-test.outcome == 'failure' || steps.wolfssl-tls-sock.outcome == 'failure' || steps.wolfssl-tls-thread.outcome == 'failure') }}
+        working-directory: ${{ env.WORKDIR }}
         run: |
-          zip -9 -r logs.zip zephyr/twister-out
+          tar czf /tmp/logs.tar.gz zephyr/twister-out 2>/dev/null || true
 
       - name: Upload failure logs
         if: ${{ failure() && (steps.wolfssl-test.outcome == 'failure' || steps.wolfssl-tls-sock.outcome == 'failure' || steps.wolfssl-tls-thread.outcome == 'failure') }}
         uses: actions/upload-artifact@v4
         with:
           name: zephyr-v4-logs-${{ matrix.config.zephyr-ref }}
-          path: logs.zip
+          path: /tmp/logs.tar.gz
           retention-days: 5
