@@ -6,6 +6,14 @@ on:
     branches: [ 'master', 'main', 'release/**' ]
   pull_request:
     branches: [ '*' ]
+  workflow_dispatch:
+    inputs:
+      wolfssl-repo:
+        description: 'wolfSSL repo URL (e.g. https://github.com/night1rider/wolfssl)'
+        required: false
+      wolfssl-branch:
+        description: 'wolfSSL branch to test'
+        required: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -41,9 +49,21 @@ jobs:
       - name: Update west.yml
         working-directory: zephyr/zephyr
         run: |
-          REF=$(echo '${{ github.ref }}' | sed -e 's/\//\\\//g')
-          sed -e 's/remotes:/remotes:\n    \- name: wolfssl\n      url\-base: https:\/\/github.com\/${{ github.repository_owner }}/' -i west.yml
-          sed -e "s/projects:/projects:\n    \- name: wolfssl\n      path: modules\/crypto\/wolfssl\n      remote: wolfssl\n      revision: $REF/" -i west.yml
+          if [ -n "${{ inputs.wolfssl-repo }}" ]; then
+            REPO_URL="${{ inputs.wolfssl-repo }}"
+          else
+            REPO_URL="https://github.com/${{ github.repository_owner }}/wolfssl"
+          fi
+          if [ -n "${{ inputs.wolfssl-branch }}" ]; then
+            WOLF_REF="${{ inputs.wolfssl-branch }}"
+          else
+            WOLF_REF="${{ github.ref }}"
+          fi
+          REPO_BASE=$(echo "${REPO_URL}" | sed 's|/[^/]*$||')
+          REF=$(echo "${WOLF_REF}" | sed -e 's/\//\\\//g')
+          REPO_BASE_ESC=$(echo "${REPO_BASE}" | sed -e 's/\//\\\//g')
+          sed -e "s/remotes:/remotes:\n    \- name: wolfssl\n      url\-base: ${REPO_BASE_ESC}/" -i west.yml
+          sed -e "s/projects:/projects:\n    \- name: wolfssl\n      path: modules\/crypto\/wolfssl\n      remote: wolfssl\n      revision: ${REF}/" -i west.yml
 
       - name: Update west workspace
         working-directory: zephyr
