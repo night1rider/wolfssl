@@ -49,6 +49,8 @@ jobs:
           '--enable-dtls --enable-dtlscid --enable-dtls13 --enable-secure-renegotiation
             --enable-psk --enable-aesccm --enable-nullcipher
             CPPFLAGS=-DWOLFSSL_STATIC_RSA',
+          '--enable-she --enable-cmac',
+          '--enable-she --enable-cmac --enable-cryptocb --enable-cryptocbutils',
           '--enable-ascon --enable-experimental',
           '--enable-ascon CPPFLAGS=-DWOLFSSL_ASCON_UNROLL --enable-experimental',
           '--enable-all CPPFLAGS=''-DNO_AES_192 -DNO_AES_256'' ',

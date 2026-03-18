@@ -1421,7 +1421,8 @@ enum wc_AlgoType {
     WC_ALGO_TYPE_KDF = 9,
     WC_ALGO_TYPE_COPY = 10,
     WC_ALGO_TYPE_FREE = 11,
-    WC_ALGO_TYPE_MAX = WC_ALGO_TYPE_FREE
+    WC_ALGO_TYPE_SHE  = 12,
+    WC_ALGO_TYPE_MAX = WC_ALGO_TYPE_SHE
 };
 
 /* KDF types */
