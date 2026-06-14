@@ -85,24 +85,37 @@ static int wc_AsuTrngFill(byte* out, word32 len)
     return 0;
 }
 
-/* WC_ALGO_TYPE_SEED: provide the ASU TRNG as a seed source for the DRBG. */
-int wc_AsuRngSeed(wc_CryptoInfo* info)
+/* WC_ALGO_TYPE_SEED: provide the ASU TRNG as a seed source for the DRBG.
+ * Internal helper reached through the wc_AsuRng dispatcher. */
+static int wc_AsuRngSeed(wc_CryptoInfo* info)
 {
-    if (info == NULL) {
-        return BAD_FUNC_ARG;
-    }
-
     return wc_AsuTrngFill(info->seed.seed, info->seed.sz);
 }
 
-/* WC_ALGO_TYPE_RNG: serve random blocks straight from the ASU TRNG. */
-int wc_AsuRngGenerate(wc_CryptoInfo* info)
+/* WC_ALGO_TYPE_RNG: serve random blocks straight from the ASU TRNG.
+ * Internal helper reached through the wc_AsuRng dispatcher. */
+static int wc_AsuRngGenerate(wc_CryptoInfo* info)
+{
+    return wc_AsuTrngFill(info->rng.out, info->rng.sz);
+}
+
+/* Single entry point for the ASU TRNG. The crypto callback dispatcher routes
+ * both random number requests here and this handler decides which it is: seed a
+ * DRBG (WC_ALGO_TYPE_SEED) or serve random blocks (WC_ALGO_TYPE_RNG). */
+int wc_AsuRng(wc_CryptoInfo* info)
 {
     if (info == NULL) {
         return BAD_FUNC_ARG;
     }
 
-    return wc_AsuTrngFill(info->rng.out, info->rng.sz);
+    switch (info->algo_type) {
+        case WC_ALGO_TYPE_SEED:
+            return wc_AsuRngSeed(info);
+        case WC_ALGO_TYPE_RNG:
+            return wc_AsuRngGenerate(info);
+        default:
+            return CRYPTOCB_UNAVAILABLE;
+    }
 }
 
 #endif /* WOLFSSL_VERSAL_GEN2_ASU_TRNG */

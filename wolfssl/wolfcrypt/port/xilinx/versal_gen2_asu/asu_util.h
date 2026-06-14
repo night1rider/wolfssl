@@ -36,6 +36,16 @@
 extern "C" {
 #endif
 
+/* Debug print to confirm operations are going through the ASU port. Enable by
+ * defining WOLFSSL_VERSAL_GEN2_ASU_DEBUG in user_settings.h. Prints over the
+ * standalone console (xil_printf); compiles out otherwise. */
+#ifdef WOLFSSL_VERSAL_GEN2_ASU_DEBUG
+    #include "xil_printf.h"
+    #define WC_ASU_PRINTF(...) xil_printf(__VA_ARGS__)
+#else
+    #define WC_ASU_PRINTF(...) ((void)0)
+#endif
+
 /* Completion record for one asynchronous ASU request. The ASU client invokes
  * the shared response handler from its mailbox path, which fills this record;
  * the submitting code then spins until Done is set. */
