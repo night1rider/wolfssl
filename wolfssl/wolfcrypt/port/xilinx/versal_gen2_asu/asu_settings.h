@@ -30,7 +30,7 @@
  *   offloaded. To offload a subset, also define one or more of the engine
  *   macros below, in which case only those are offloaded:
  *       WOLFSSL_VERSAL_GEN2_ASU_TRNG
- *       WOLFSSL_VERSAL_GEN2_ASU_SHA
+ *       WOLFSSL_VERSAL_GEN2_ASU_HASH
  *       WOLFSSL_VERSAL_GEN2_ASU_HMAC
  *       WOLFSSL_VERSAL_GEN2_ASU_AES
  *       WOLFSSL_VERSAL_GEN2_ASU_CMAC
@@ -52,14 +52,14 @@
 /* If the port is on but no specific engine was requested, enable the full
  * supported set. */
 #if !defined(WOLFSSL_VERSAL_GEN2_ASU_TRNG) && \
-    !defined(WOLFSSL_VERSAL_GEN2_ASU_SHA)  && \
+    !defined(WOLFSSL_VERSAL_GEN2_ASU_HASH)  && \
     !defined(WOLFSSL_VERSAL_GEN2_ASU_HMAC) && \
     !defined(WOLFSSL_VERSAL_GEN2_ASU_AES)  && \
     !defined(WOLFSSL_VERSAL_GEN2_ASU_CMAC) && \
     !defined(WOLFSSL_VERSAL_GEN2_ASU_RSA)  && \
     !defined(WOLFSSL_VERSAL_GEN2_ASU_ECC)
     #define WOLFSSL_VERSAL_GEN2_ASU_TRNG
-    #define WOLFSSL_VERSAL_GEN2_ASU_SHA
+    #define WOLFSSL_VERSAL_GEN2_ASU_HASH
     #define WOLFSSL_VERSAL_GEN2_ASU_HMAC
     #define WOLFSSL_VERSAL_GEN2_ASU_AES
     #define WOLFSSL_VERSAL_GEN2_ASU_CMAC

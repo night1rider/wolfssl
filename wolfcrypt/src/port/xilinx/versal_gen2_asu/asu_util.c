@@ -131,12 +131,15 @@ word32 wc_AsuTransact(AsuSubmitFn submit, void* ctx, word32* additionalStatus)
     wolfSSL_CryptHwMutexUnLock();
 
     if (status != XST_SUCCESS) {
+        WC_ASU_PRINTF("[ASU] submit failed status=%d\r\n", (int)status);
         return (word32)status;
     }
 
     /* Wait on our own completion outside the lock, so other callers submit and
      * run concurrently up to the ASU queue depth. */
     status = (s32)wc_AsuWaitDone(&wait);
+
+    WC_ASU_PRINTF("[ASU] op done status=%d\r\n", (int)status);
 
     if (additionalStatus != NULL) {
         *additionalStatus = params.AdditionalStatus;

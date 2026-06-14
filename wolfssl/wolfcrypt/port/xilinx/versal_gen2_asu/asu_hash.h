@@ -1,4 +1,4 @@
-/* asu_rng.h
+/* asu_hash.h
  *
  * Copyright (C) 2006-2026 wolfSSL Inc.
  *
@@ -19,15 +19,16 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-/* ASU TRNG entropy for the wolfSSL crypto callback. Seeds the wolfCrypt Hash
- * DRBG from the ASU true random number generator. */
+/* ASU hashing for the wolfSSL crypto callback: SHA2 256/384/512 and SHA3
+ * 256/384/512. The message is accumulated per hash context and hashed in a
+ * single ASU operation at finalize. See asu_hash.c for why. */
 
-#ifndef WOLFSSL_VERSAL_GEN2_ASU_RNG_H
-#define WOLFSSL_VERSAL_GEN2_ASU_RNG_H
+#ifndef WOLFSSL_VERSAL_GEN2_ASU_HASH_H
+#define WOLFSSL_VERSAL_GEN2_ASU_HASH_H
 
 #include <wolfssl/wolfcrypt/settings.h>
 
-#ifdef WOLFSSL_VERSAL_GEN2_ASU_TRNG
+#ifdef WOLFSSL_VERSAL_GEN2_ASU_HASH
 
 #include <wolfssl/wolfcrypt/cryptocb.h>
 
@@ -35,19 +36,18 @@
 extern "C" {
 #endif
 
-/* Single entry point for the ASU TRNG. The crypto callback dispatcher routes
- * both random number operations here and this handler decides which it is: seed
- * a DRBG (WC_ALGO_TYPE_SEED, fills info->seed) or serve random blocks
- * (WC_ALGO_TYPE_RNG, fills info->rng). The ASU TRNG returns at most one strength
- * block (32 bytes) per call, so larger requests are filled over several ASU
- * transactions. Returns 0 on success, CRYPTOCB_UNAVAILABLE for an unsupported
- * operation, or a negative error. */
-WOLFSSL_LOCAL int wc_AsuRng(wc_CryptoInfo* info);
+/* Single entry point for the SHA2/SHA3 engine. The crypto callback dispatcher
+ * routes every hash related operation here and this handler decides which it is:
+ * update and final (WC_ALGO_TYPE_HASH), context copy (WC_ALGO_TYPE_COPY), or
+ * context free (WC_ALGO_TYPE_FREE). Supports SHA2 256/384/512 and SHA3
+ * 256/384/512. Returns 0 on success, CRYPTOCB_UNAVAILABLE for an unsupported
+ * operation or hash type (software fallback), or a negative error. */
+WOLFSSL_LOCAL int wc_AsuHash(wc_CryptoInfo* info);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* WOLFSSL_VERSAL_GEN2_ASU_TRNG */
+#endif /* WOLFSSL_VERSAL_GEN2_ASU_HASH */
 
-#endif /* WOLFSSL_VERSAL_GEN2_ASU_RNG_H */
+#endif /* WOLFSSL_VERSAL_GEN2_ASU_HASH_H */
