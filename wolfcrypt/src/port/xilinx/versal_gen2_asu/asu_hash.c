@@ -19,8 +19,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-/* ASU hashing for the wolfSSL crypto callback: SHA2 256/384/512 and SHA3
- * 256/384/512.
+/* ASU hashing for the wolfSSL crypto callback: SHA2 256/384/512, SHA3
+ * 256/384/512 and SHAKE256.
  *
  * Why the message is buffered instead of streamed to the hardware:
  *   wolfSSL drives hashing as update()...update()...final(), and may have
@@ -45,9 +45,15 @@
  * buffer (a plain struct copy would share the pointer), and free releases the
  * buffer if a context is freed without being finalized.
  *
- * SHAKE256 is not handled here: it is an extendable output function whose output
- * length is chosen at final(), but the hash crypto callback (wc_CryptoCb_Sha3Hash)
- * does not convey that length, so SHAKE falls back to software.
+ * SHAKE256 is an extendable output function: the output length chosen at final()
+ * is carried to this callback in the hash info outSz field (by wc_CryptoCb_Shake).
+ * An output that fits the ASU response mailbox (WC_ASU_SHAKE_HW_MAX_BYTES) is
+ * produced in one ASU SHAKE256 operation; a longer output cannot be returned by
+ * the hardware (see that define) and is computed in software from the same
+ * accumulated message. SHAKE128 has no ASU mode, so it is declined and runs in
+ * software. Only the update()/final() hash style routes here; the
+ * absorb()/squeezeBlocks() streaming XOF (used by ML-KEM and ML-DSA) is not on
+ * the callback path and stays in software.
  */
 
 #ifdef HAVE_CONFIG_H
@@ -143,6 +149,7 @@ static word32 wc_AsuHashCtxSize(int hashType)
         case WC_HASH_TYPE_SHA3_256:
         case WC_HASH_TYPE_SHA3_384:
         case WC_HASH_TYPE_SHA3_512:
+        case WC_HASH_TYPE_SHAKE256: /* wc_Shake is a wc_Sha3 */
             return (word32)sizeof(wc_Sha3);
         default:
             return 0;
@@ -167,6 +174,7 @@ static void** wc_AsuHashDevCtx(void* hashCtx, int hashType)
         case WC_HASH_TYPE_SHA3_256:
         case WC_HASH_TYPE_SHA3_384:
         case WC_HASH_TYPE_SHA3_512:
+        case WC_HASH_TYPE_SHAKE256: /* wc_Shake is a wc_Sha3 */
             return &((wc_Sha3*)hashCtx)->devCtx;
         default:
             return NULL;
@@ -226,6 +234,16 @@ static int wc_AsuHashResolve(wc_CryptoInfo* info, void*** devCtx, u8* shaType,
             *shaMode = XASU_SHA_MODE_512;
             *hashLen = WC_SHA3_512_DIGEST_SIZE;
             break;
+        case WC_HASH_TYPE_SHAKE256:
+            /* SHAKE is an extendable output function: the digest length is the
+             * caller's requested output, carried in outSz on the final call.
+             * SHAKE128 is not a hardware mode, so it falls through to the
+             * default and runs in software. */
+            *devCtx  = wc_AsuHashDevCtx(info->hash.sha3, info->hash.type);
+            *shaType = XASU_SHA3_TYPE;
+            *shaMode = XASU_SHA_MODE_SHAKE256;
+            *hashLen = info->hash.outSz;
+            break;
         default:
             return CRYPTOCB_UNAVAILABLE;
     }
@@ -254,12 +272,27 @@ static int wc_AsuHashOneShot(u8 shaType, u8 shaMode, const byte* data,
 {
     AsuHashReq req;
     word32 status;
+    byte*  outAddr = digest;
+    word32 outLen  = hashLen;
+    byte   xofTmp[XASU_SHAKE_256_MAX_HASH_LEN];
+
+    /* SHAKE256 is an extendable output function with a caller chosen length. The
+     * ASU reads the result out of the digest registers a 32 bit word at a time,
+     * so a length that is not a multiple of 4 would drop the final partial word.
+     * Round the request up to a word boundary into a temporary buffer and copy
+     * back exactly the bytes asked for. The ASU also caps a single SHAKE squeeze
+     * at one rate block (XASU_SHAKE_256_MAX_HASH_LEN), which bounds the temp. */
+    if ((shaMode == XASU_SHA_MODE_SHAKE256) && ((hashLen % 4u) != 0u) &&
+        (hashLen <= XASU_SHAKE_256_MAX_HASH_LEN)) {
+        outLen  = (hashLen + 3u) & ~3u;
+        outAddr = xofTmp;
+    }
 
     XMEMSET(&req, 0, sizeof(req));
     req.cmd.DataAddr    = (u64)(UINTPTR)data;
     req.cmd.DataSize    = dataLen;
-    req.cmd.HashAddr    = (u64)(UINTPTR)digest;
-    req.cmd.HashBufSize = hashLen;
+    req.cmd.HashAddr    = (u64)(UINTPTR)outAddr;
+    req.cmd.HashBufSize = outLen;
     req.cmd.ShaMode     = shaMode;
     req.cmd.IsLast      = (u8)XASU_TRUE;
     if (dataLen > 0) {
@@ -291,7 +324,51 @@ static int wc_AsuHashOneShot(u8 shaType, u8 shaMode, const byte* data,
         return WC_HW_E;
     }
 
+    /* Copy back the exact byte count when a temp buffer was used for the SHAKE
+     * word-alignment round up. */
+    if (outAddr != digest) {
+        XMEMCPY(digest, xofTmp, hashLen);
+    }
+
     return 0;
+}
+
+/* The ASU returns a hash through a fixed response mailbox slot of 16 words (64
+ * bytes), sized for the largest fixed digest (SHA-512). SHAKE256 is an
+ * extendable output function, so a requested output up to this size fits in one
+ * ASU operation and is offloaded; a longer output is computed in software
+ * instead (see wc_AsuShakeSoftware).
+ *
+ * The hardware could in principle emit more by continuing the squeeze a rate
+ * block at a time, but that path is closed to us: the XAsu_ShaOperationCmd
+ * "next xof" continue-squeeze flag (ShakeReserved) is documented "NA for client,
+ * ASUFW internal use", and the ASU server resets the squeeze after every finish.
+ * So a client cannot chain blocks, and anything past one mailbox stays software. */
+#define WC_ASU_SHAKE_HW_MAX_BYTES 64
+
+/* Compute SHAKE256 of the already accumulated message in software, for outputs
+ * larger than the ASU can return. A private context with INVALID_DEVID keeps it
+ * off the crypto callback (no recursion) so wolfSSL runs its own SHAKE. */
+static int wc_AsuShakeSoftware(const byte* data, word32 dataLen, byte* digest,
+    word32 hashLen)
+{
+    wc_Shake shake;
+    int      ret;
+
+    ret = wc_InitShake256(&shake, NULL, INVALID_DEVID);
+    if (ret != 0) {
+        return ret;
+    }
+
+    if (dataLen > 0) {
+        ret = wc_Shake256_Update(&shake, data, dataLen);
+    }
+    if (ret == 0) {
+        ret = wc_Shake256_Final(&shake, digest, hashLen);
+    }
+
+    wc_Shake256_Free(&shake);
+    return ret;
 }
 
 /* update() and final() handling for WC_ALGO_TYPE_HASH. Internal helper reached
@@ -346,8 +423,17 @@ static int wc_AsuHashCompute(wc_CryptoInfo* info)
             dataLen = keep->used;
         }
 
-        ret = wc_AsuHashOneShot(shaType, shaMode, data, dataLen,
-            info->hash.digest, hashLen);
+        /* SHAKE256 output longer than the ASU response mailbox can carry is
+         * produced in software from the same accumulated message; everything
+         * else (the fixed hashes and short SHAKE) is one ASU operation. */
+        if ((shaMode == XASU_SHA_MODE_SHAKE256) &&
+            (hashLen > WC_ASU_SHAKE_HW_MAX_BYTES)) {
+            ret = wc_AsuShakeSoftware(data, dataLen, info->hash.digest, hashLen);
+        }
+        else {
+            ret = wc_AsuHashOneShot(shaType, shaMode, data, dataLen,
+                info->hash.digest, hashLen);
+        }
 
         if (keep != NULL) {
             wc_AsuHashKeepFree(keep);
