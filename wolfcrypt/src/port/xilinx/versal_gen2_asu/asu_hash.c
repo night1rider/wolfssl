@@ -126,6 +126,10 @@ static int wc_AsuHashSubmit(XAsu_ClientParams* params, void* ctx)
 {
     AsuHashReq* req = (AsuHashReq*)ctx;
 
+    if (params == NULL || req == NULL) {
+        return XST_FAILURE;
+    }
+
     if (req->isSha3 != 0) {
         return XAsu_Sha3Operation(params, &req->cmd);
     }
@@ -187,6 +191,11 @@ static void** wc_AsuHashDevCtx(void* hashCtx, int hashType)
 static int wc_AsuHashResolve(wc_CryptoInfo* info, void*** devCtx, u8* shaType,
     u8* shaMode, word32* hashLen)
 {
+    if (info == NULL || devCtx == NULL || shaType == NULL ||
+        shaMode == NULL || hashLen == NULL) {
+        return BAD_FUNC_ARG;
+    }
+
     switch (info->hash.type) {
         case WC_HASH_TYPE_SHA256:
             *devCtx  = wc_AsuHashDevCtx(info->hash.sha256, info->hash.type);
@@ -276,6 +285,10 @@ static int wc_AsuHashOneShot(u8 shaType, u8 shaMode, const byte* data,
     word32 outLen  = hashLen;
     byte   xofTmp[XASU_SHAKE_256_MAX_HASH_LEN];
 
+    if (digest == NULL || (data == NULL && dataLen > 0)) {
+        return BAD_FUNC_ARG;
+    }
+
     /* SHAKE256 is an extendable output function with a caller chosen length. The
      * ASU reads the result out of the digest registers a 32 bit word at a time,
      * so a length that is not a multiple of 4 would drop the final partial word.
@@ -354,6 +367,10 @@ static int wc_AsuShakeSoftware(const byte* data, word32 dataLen, byte* digest,
 {
     wc_Shake shake;
     int      ret;
+
+    if (digest == NULL || (data == NULL && dataLen > 0)) {
+        return BAD_FUNC_ARG;
+    }
 
     ret = wc_InitShake256(&shake, NULL, INVALID_DEVID);
     if (ret != 0) {
@@ -459,6 +476,9 @@ static int wc_AsuHashCopy(wc_CryptoInfo* info)
     word32       ctxSize;
     int          ret;
 
+    if (info == NULL) {
+        return BAD_FUNC_ARG;
+    }
     if (info->copy.algo != WC_ALGO_TYPE_HASH) {
         return CRYPTOCB_UNAVAILABLE;
     }
@@ -517,6 +537,9 @@ static int wc_AsuHashFree(wc_CryptoInfo* info)
     void**       devCtx;
     AsuHashKeep* keep;
 
+    if (info == NULL) {
+        return BAD_FUNC_ARG;
+    }
     if (info->free.algo != WC_ALGO_TYPE_HASH) {
         return CRYPTOCB_UNAVAILABLE;
     }
