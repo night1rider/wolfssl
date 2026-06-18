@@ -48,6 +48,10 @@ static int wc_AsuTrngSubmit(XAsu_ClientParams* params, void* ctx)
 {
     AsuTrngReq* req = (AsuTrngReq*)ctx;
 
+    if (params == NULL || req == NULL) {
+        return XST_FAILURE;
+    }
+
     return XAsu_TrngGetRandomNum(params, req->buf, req->len);
 }
 
@@ -89,6 +93,10 @@ static int wc_AsuTrngFill(byte* out, word32 len)
  * Internal helper reached through the wc_AsuRng dispatcher. */
 static int wc_AsuRngSeed(wc_CryptoInfo* info)
 {
+    if (info == NULL) {
+        return BAD_FUNC_ARG;
+    }
+
     return wc_AsuTrngFill(info->seed.seed, info->seed.sz);
 }
 
@@ -96,6 +104,10 @@ static int wc_AsuRngSeed(wc_CryptoInfo* info)
  * Internal helper reached through the wc_AsuRng dispatcher. */
 static int wc_AsuRngGenerate(wc_CryptoInfo* info)
 {
+    if (info == NULL) {
+        return BAD_FUNC_ARG;
+    }
+
     return wc_AsuTrngFill(info->rng.out, info->rng.sz);
 }
 
