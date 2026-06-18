@@ -95,7 +95,10 @@ static int wc_AsuCipherOneShot(Aes* aes, byte* out, const byte* in, word32 sz,
     if (aes == NULL || out == NULL || in == NULL) {
         return BAD_FUNC_ARG;
     }
-    if (sz == 0 || (sz % XASU_AES_BLOCK_SIZE_IN_BYTES) != 0) {
+    /* The ASU client accepts only whole 16-byte blocks within the DMA limit;
+     * non block-aligned or oversized lengths run in software (decline). */
+    if (sz == 0 || (sz % XASU_AES_BLOCK_SIZE_IN_BYTES) != 0 ||
+        sz > XASU_ASU_DMA_MAX_TRANSFER_LENGTH) {
         return CRYPTOCB_UNAVAILABLE;
     }
 
@@ -154,49 +157,42 @@ static int wc_AsuCipherOneShot(Aes* aes, byte* out, const byte* in, word32 sz,
  * ciphertext block so a chained call continues correctly. */
 static int wc_AsuCipherCbc(wc_CryptoInfo* info)
 {
-    Aes*        aes;
-    byte*       out;
-    const byte* in;
-    word32      sz;
-    int         enc;
-    int         ret;
-    byte        lastBlock[WC_AES_BLOCK_SIZE];
+    byte* ctr;
+    int   ret;
+    byte  lastBlock[WC_AES_BLOCK_SIZE];
 
-    if (info == NULL) {
+    /* Reference info->cipher.aescbc fields directly; no aliasing locals. */
+    if (info == NULL || info->cipher.aescbc.aes == NULL ||
+        info->cipher.aescbc.out == NULL || info->cipher.aescbc.in == NULL) {
         return BAD_FUNC_ARG;
     }
-
-    aes = info->cipher.aescbc.aes;
-    out = info->cipher.aescbc.out;
-    in  = info->cipher.aescbc.in;
-    sz  = info->cipher.aescbc.sz;
-    enc = info->cipher.enc;
-
-    if (aes == NULL || out == NULL || in == NULL) {
-        return BAD_FUNC_ARG;
-    }
-    if (sz == 0 || (sz % WC_AES_BLOCK_SIZE) != 0) {
+    if (info->cipher.aescbc.sz == 0 ||
+        (info->cipher.aescbc.sz % WC_AES_BLOCK_SIZE) != 0) {
         return CRYPTOCB_UNAVAILABLE;
     }
 
-    /* For decrypt the next IV is the last input block; capture it now in case
-     * out aliases in. */
-    if (!enc) {
-        XMEMCPY(lastBlock, in + (sz - WC_AES_BLOCK_SIZE), WC_AES_BLOCK_SIZE);
+    /* CBC chaining IV is aes->reg. For decrypt the next IV is the last input
+     * block; capture it now in case out aliases in. */
+    ctr = (byte*)info->cipher.aescbc.aes->reg;
+    if (!info->cipher.enc) {
+        XMEMCPY(lastBlock, info->cipher.aescbc.in +
+            (info->cipher.aescbc.sz - WC_AES_BLOCK_SIZE), WC_AES_BLOCK_SIZE);
     }
 
-    ret = wc_AsuCipherOneShot(aes, out, in, sz, enc, (u8)XASU_AES_CBC_MODE,
-        (const byte*)aes->reg);
+    ret = wc_AsuCipherOneShot(info->cipher.aescbc.aes, info->cipher.aescbc.out,
+        info->cipher.aescbc.in, info->cipher.aescbc.sz, info->cipher.enc,
+        (u8)XASU_AES_CBC_MODE, ctr);
     if (ret != 0) {
         return ret;
     }
 
-    if (enc) {
-        XMEMCPY((byte*)aes->reg, out + (sz - WC_AES_BLOCK_SIZE),
-            WC_AES_BLOCK_SIZE);
+    /* Update aes->reg to the last ciphertext block for a chained call. */
+    if (info->cipher.enc) {
+        XMEMCPY(ctr, info->cipher.aescbc.out +
+            (info->cipher.aescbc.sz - WC_AES_BLOCK_SIZE), WC_AES_BLOCK_SIZE);
     }
     else {
-        XMEMCPY((byte*)aes->reg, lastBlock, WC_AES_BLOCK_SIZE);
+        XMEMCPY(ctr, lastBlock, WC_AES_BLOCK_SIZE);
     }
 
     return 0;
@@ -205,32 +201,73 @@ static int wc_AsuCipherCbc(wc_CryptoInfo* info)
 /* AES-ECB. No IV and no chaining state. */
 static int wc_AsuCipherEcb(wc_CryptoInfo* info)
 {
-    Aes*        aes;
-    byte*       out;
-    const byte* in;
-    word32      sz;
-    int         enc;
-
-    if (info == NULL) {
+    /* Reference info->cipher.aesecb fields directly; no aliasing locals. */
+    if (info == NULL || info->cipher.aesecb.aes == NULL ||
+        info->cipher.aesecb.out == NULL || info->cipher.aesecb.in == NULL) {
         return BAD_FUNC_ARG;
     }
 
-    aes = info->cipher.aesecb.aes;
-    out = info->cipher.aesecb.out;
-    in  = info->cipher.aesecb.in;
-    sz  = info->cipher.aesecb.sz;
-    enc = info->cipher.enc;
-
-    if (aes == NULL || out == NULL || in == NULL) {
-        return BAD_FUNC_ARG;
-    }
-
-    return wc_AsuCipherOneShot(aes, out, in, sz, enc, (u8)XASU_AES_ECB_MODE,
-        NULL);
+    return wc_AsuCipherOneShot(info->cipher.aesecb.aes, info->cipher.aesecb.out,
+        info->cipher.aesecb.in, info->cipher.aesecb.sz, info->cipher.enc,
+        (u8)XASU_AES_ECB_MODE, NULL);
 }
 
+#ifdef WOLFSSL_AES_COUNTER
+/* AES-CTR via the ASU CTR engine (counter in aes->reg). The ASU counter field
+ * diverges from wolfSSL's full 128-bit increment only on wrap, so decline (to
+ * software) when the op would overflow the low 32-bit counter, has leftover
+ * keystream, or is non block-aligned. */
+static int wc_AsuCipherCtr(wc_CryptoInfo* info)
+{
+    byte*  ctr;
+    word32 blocks;
+    word32 low;
+    int    ret;
+
+    /* Reference info->cipher.aesctr fields directly; no aliasing locals. */
+    if (info == NULL || info->cipher.aesctr.aes == NULL ||
+        info->cipher.aesctr.out == NULL || info->cipher.aesctr.in == NULL) {
+        return BAD_FUNC_ARG;
+    }
+    /* CTR streaming state lives in the Aes context; the ASU starts a fresh
+     * counter block, so decline leftover keystream or a non block-aligned size. */
+    if (info->cipher.aesctr.aes->left != 0 || info->cipher.aesctr.sz == 0 ||
+        (info->cipher.aesctr.sz % WC_AES_BLOCK_SIZE) != 0) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+
+    /* Counter is big-endian in aes->reg; the low 32 bits are the last 4 bytes.
+     * Decline if the block count would carry past them (ASU wrap divergence). */
+    ctr = (byte*)info->cipher.aesctr.aes->reg;
+    low = ((word32)ctr[12] << 24) | ((word32)ctr[13] << 16) |
+          ((word32)ctr[14] << 8)  |  (word32)ctr[15];
+    blocks = info->cipher.aesctr.sz / WC_AES_BLOCK_SIZE;
+    if (low > (0xFFFFFFFFU - blocks)) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+
+    /* CTR is symmetric; drive the engine encrypt with aes->reg as the counter. */
+    ret = wc_AsuCipherOneShot(info->cipher.aesctr.aes, info->cipher.aesctr.out,
+        info->cipher.aesctr.in, info->cipher.aesctr.sz, 1,
+        (u8)XASU_AES_CTR_MODE, ctr);
+    if (ret != 0) {
+        return ret;
+    }
+
+    /* No carry past the low 32 bits (guarded), so advance only that word to
+     * match wolfSSL for a chained call. */
+    low += blocks;
+    ctr[12] = (byte)(low >> 24);
+    ctr[13] = (byte)(low >> 16);
+    ctr[14] = (byte)(low >> 8);
+    ctr[15] = (byte)(low);
+
+    return 0;
+}
+#endif /* WOLFSSL_AES_COUNTER */
+
 /* Single entry point for the cipher engine, reached through the crypto callback
- * dispatcher. Only AES-CBC and AES-ECB are handled. */
+ * dispatcher. Handles AES-CBC, AES-ECB and AES-CTR. */
 int wc_AsuCipher(wc_CryptoInfo* info)
 {
     if (info == NULL) {
@@ -248,6 +285,10 @@ int wc_AsuCipher(wc_CryptoInfo* info)
     #ifdef HAVE_AES_ECB
         case WC_CIPHER_AES_ECB:
             return wc_AsuCipherEcb(info);
+    #endif
+    #ifdef WOLFSSL_AES_COUNTER
+        case WC_CIPHER_AES_CTR:
+            return wc_AsuCipherCtr(info);
     #endif
         default:
             return CRYPTOCB_UNAVAILABLE;
