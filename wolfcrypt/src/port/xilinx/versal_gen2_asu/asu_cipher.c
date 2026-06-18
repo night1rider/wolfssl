@@ -19,8 +19,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-/* ASU symmetric cipher engine for the wolfSSL crypto callback: AES-CBC and
- * AES-ECB offload. Each call is one atomic ASU operation; the raw key
+/* ASU symmetric cipher engine for the wolfSSL crypto callback: AES-CBC, ECB,
+ * CTR, GCM and CCM offload. Each call is one atomic ASU operation; the raw key
  * (aes->devKey) and CBC chaining IV (aes->reg) live on the wolfSSL Aes context,
  * so no per-context state is kept here and no copy/free handlers are needed. The
  * ASU supports only 128 and 256 bit keys and whole 16 byte blocks; AES-192,
@@ -407,8 +407,155 @@ static int wc_AsuCipherGcm(wc_CryptoInfo* info)
 }
 #endif /* HAVE_AESGCM */
 
+#ifdef HAVE_AESCCM
+/* AES-CCM offload. The unified auth struct overlays nonce/iv, so CCM is read
+ * through aesccm_enc.nonce (encrypt and decrypt share the layout). The ASU takes
+ * a 7..13 byte nonce in the IV slot and an even 4..16 byte tag, and formats the
+ * CCM B0/counter blocks itself, so the raw nonce is passed straight through. */
+static int wc_AsuCipherCcm(wc_CryptoInfo* info)
+{
+    AsuCipherReq req;
+    u32          keySize = 0;
+    word32       addl = 0;
+    word32       status;
+    int          ret;
+
+    if (info == NULL || info->cipher.aesccm_enc.aes == NULL ||
+        info->cipher.aesccm_enc.nonce == NULL ||
+        info->cipher.aesccm_enc.authTag == NULL) {
+        return BAD_FUNC_ARG;
+    }
+    /* Data/AAD buffers must be valid when their length is non-zero. */
+    if ((info->cipher.aesccm_enc.sz != 0) &&
+        ((info->cipher.aesccm_enc.in == NULL) ||
+         (info->cipher.aesccm_enc.out == NULL))) {
+        return BAD_FUNC_ARG;
+    }
+    if ((info->cipher.aesccm_enc.authInSz != 0) &&
+        (info->cipher.aesccm_enc.authIn == NULL)) {
+        return BAD_FUNC_ARG;
+    }
+    /* CCM requires a 7..13 byte nonce and an even 4..16 byte tag; outside this
+     * the call is malformed and software rejects it identically. */
+    if (info->cipher.aesccm_enc.nonceSz < XASU_AES_CCM_MIN_NONCE_LEN ||
+        info->cipher.aesccm_enc.nonceSz > XASU_AES_CCM_MAX_NONCE_LEN ||
+        (info->cipher.aesccm_enc.authTagSz % XASU_AES_EVEN_MODULUS) != 0 ||
+        info->cipher.aesccm_enc.authTagSz < XASU_AES_MIN_TAG_LENGTH_IN_BYTES ||
+        info->cipher.aesccm_enc.authTagSz > XASU_AES_MAX_TAG_LENGTH_IN_BYTES) {
+        return BAD_FUNC_ARG;
+    }
+
+    /* The ASU CCM engine needs at least one byte of data or AAD; the empty
+     * message with empty AAD (tag-only) case runs in software. */
+    if (info->cipher.aesccm_enc.sz == 0 && info->cipher.aesccm_enc.authInSz == 0) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+
+    /* The ASU client takes whole 16-byte plaintext and AAD within the DMA limit;
+     * anything else runs in software. */
+    if ((info->cipher.aesccm_enc.sz % XASU_AES_BLOCK_SIZE_IN_BYTES) != 0 ||
+        (info->cipher.aesccm_enc.authInSz % XASU_AES_BLOCK_SIZE_IN_BYTES) != 0 ||
+        info->cipher.aesccm_enc.sz > XASU_ASU_DMA_MAX_TRANSFER_LENGTH ||
+        info->cipher.aesccm_enc.authInSz > XASU_ASU_DMA_MAX_TRANSFER_LENGTH) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+
+    ret = wc_AsuCipherKeySize(info->cipher.aesccm_enc.aes->keylen, &keySize);
+    if (ret != 0) {
+        return ret;
+    }
+
+    XMEMSET(&req, 0, sizeof(req));
+    req.keyObj.KeyAddress     = (u64)(UINTPTR)info->cipher.aesccm_enc.aes->devKey;
+    req.keyObj.KeySize        = keySize;
+    req.keyObj.KeySrc         = XASU_AES_USER_KEY_0;
+
+    /* The ASU client rejects a non-zero buffer address paired with a zero
+     * length, so leave these at the memset-zero default when the length is 0. */
+    if (info->cipher.aesccm_enc.sz != 0) {
+        req.params.InputDataAddr  = (u64)(UINTPTR)info->cipher.aesccm_enc.in;
+        req.params.OutputDataAddr = (u64)(UINTPTR)info->cipher.aesccm_enc.out;
+    }
+    if (info->cipher.aesccm_enc.authInSz != 0) {
+        req.params.AadAddr        = (u64)(UINTPTR)info->cipher.aesccm_enc.authIn;
+    }
+    req.params.KeyObjectAddr  = (u64)(UINTPTR)&req.keyObj;
+    req.params.IvAddr         = (u64)(UINTPTR)info->cipher.aesccm_enc.nonce;
+    req.params.TagAddr        = (u64)(UINTPTR)info->cipher.aesccm_enc.authTag;
+    req.params.DataLen        = info->cipher.aesccm_enc.sz;
+    req.params.AadLen         = info->cipher.aesccm_enc.authInSz;
+    req.params.IvLen          = info->cipher.aesccm_enc.nonceSz;
+    req.params.TagLen         = info->cipher.aesccm_enc.authTagSz;
+    req.params.EngineMode     = (u8)XASU_AES_CCM_MODE;
+    req.params.OperationFlags =
+        (u8)(XASU_AES_INIT | XASU_AES_UPDATE | XASU_AES_FINAL);
+    req.params.IsLast         = (u8)XASU_TRUE;
+    if (info->cipher.enc) {
+        req.params.OperationType = (u8)XASU_AES_ENCRYPT_OPERATION;
+    }
+    else {
+        req.params.OperationType = (u8)XASU_AES_DECRYPT_OPERATION;
+    }
+
+    WC_ASU_PRINTF("[ASU] cipher mode=%d enc=%d keyLen=%u sz=%u aad=%u tag=%u\r\n",
+        (int)XASU_AES_CCM_MODE, info->cipher.enc,
+        (unsigned int)info->cipher.aesccm_enc.aes->keylen,
+        (unsigned int)info->cipher.aesccm_enc.sz,
+        (unsigned int)info->cipher.aesccm_enc.authInSz,
+        (unsigned int)info->cipher.aesccm_enc.authTagSz);
+
+    /* The ASU DMAs key, nonce, AAD, input (and the tag on decrypt) from memory. */
+    wc_AsuCacheFlush(info->cipher.aesccm_enc.aes->devKey,
+        info->cipher.aesccm_enc.aes->keylen);
+    wc_AsuCacheFlush(&req.keyObj, sizeof(req.keyObj));
+    wc_AsuCacheFlush(info->cipher.aesccm_enc.nonce, info->cipher.aesccm_enc.nonceSz);
+    if (info->cipher.aesccm_enc.authInSz != 0) {
+        wc_AsuCacheFlush(info->cipher.aesccm_enc.authIn,
+            info->cipher.aesccm_enc.authInSz);
+    }
+    if (info->cipher.aesccm_enc.sz != 0) {
+        wc_AsuCacheFlush(info->cipher.aesccm_enc.in, info->cipher.aesccm_enc.sz);
+    }
+    if (!info->cipher.enc) {
+        wc_AsuCacheFlush(info->cipher.aesccm_enc.authTag,
+            info->cipher.aesccm_enc.authTagSz);
+    }
+
+    status = wc_AsuTransact(wc_AsuCipherSubmit, &req, &addl);
+
+    /* Invalidate the CPU's view of the ASU-written output (and the tag on encrypt). */
+    if (info->cipher.aesccm_enc.sz != 0) {
+        wc_AsuCacheInvalidate(info->cipher.aesccm_enc.out,
+            info->cipher.aesccm_enc.sz);
+    }
+    if (info->cipher.enc) {
+        wc_AsuCacheInvalidate(info->cipher.aesccm_enc.authTag,
+            info->cipher.aesccm_enc.authTagSz);
+    }
+
+    /* Decrypt reports a tag mismatch as a failure; surface it as AES_CCM_AUTH_E.
+     * Encrypt success is confirmed by TAG_READ, decrypt by TAG_MATCHED. */
+    if (status != XST_SUCCESS) {
+        if (!info->cipher.enc) {
+            return AES_CCM_AUTH_E;
+        }
+        return WC_HW_E;
+    }
+    if (info->cipher.enc) {
+        if (addl != (word32)XASU_AES_TAG_READ) {
+            return WC_HW_E;
+        }
+    }
+    else if (addl != (word32)XASU_AES_TAG_MATCHED) {
+        return AES_CCM_AUTH_E;
+    }
+
+    return 0;
+}
+#endif /* HAVE_AESCCM */
+
 /* Single entry point for the cipher engine, reached through the crypto callback
- * dispatcher. Handles AES-CBC, AES-ECB, AES-CTR and AES-GCM. */
+ * dispatcher. Handles AES-CBC, AES-ECB, AES-CTR, AES-GCM and AES-CCM. */
 int wc_AsuCipher(wc_CryptoInfo* info)
 {
     if (info == NULL) {
@@ -434,6 +581,10 @@ int wc_AsuCipher(wc_CryptoInfo* info)
     #ifdef HAVE_AESGCM
         case WC_CIPHER_AES_GCM:
             return wc_AsuCipherGcm(info);
+    #endif
+    #ifdef HAVE_AESCCM
+        case WC_CIPHER_AES_CCM:
+            return wc_AsuCipherCcm(info);
     #endif
         default:
             return CRYPTOCB_UNAVAILABLE;
