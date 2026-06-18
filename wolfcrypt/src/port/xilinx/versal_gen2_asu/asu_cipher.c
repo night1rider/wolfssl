@@ -20,7 +20,7 @@
  */
 
 /* ASU symmetric cipher engine for the wolfSSL crypto callback: AES-CBC, ECB,
- * CTR, CFB, GCM and CCM offload. Each call is one atomic ASU operation; the raw key
+ * CTR, CFB, OFB, GCM and CCM offload. Each call is one atomic ASU operation; the raw key
  * (aes->devKey) and CBC chaining IV (aes->reg) live on the wolfSSL Aes context,
  * so no per-context state is kept here and no copy/free handlers are needed. The
  * ASU supports only 128 and 256 bit keys and whole 16 byte blocks; AES-192,
@@ -316,6 +316,54 @@ static int wc_AsuCipherCfb(wc_CryptoInfo* info)
 }
 #endif /* WOLFSSL_AES_CFB */
 
+#ifdef WOLFSSL_AES_OFB
+/* AES-OFB via the ASU OFB engine. OFB's feedback register is the keystream block
+ * (independent of data and direction), recovered after the op as out XOR in since
+ * out = in XOR keystream. OFB is symmetric, so the engine is always driven as
+ * encrypt; like CTR it is a stream mode, so decline leftover keystream or a non
+ * block-aligned size. */
+static int wc_AsuCipherOfb(wc_CryptoInfo* info)
+{
+    byte*  ctr;
+    byte*  lastOut;
+    int    ret;
+    word32 i;
+    byte   lastIn[WC_AES_BLOCK_SIZE];
+
+    if (info == NULL || info->cipher.aesofb.aes == NULL ||
+        info->cipher.aesofb.out == NULL || info->cipher.aesofb.in == NULL) {
+        return BAD_FUNC_ARG;
+    }
+    /* OFB streaming state lives in the Aes context; the ASU starts a fresh
+     * keystream block, so decline leftover keystream or a non block-aligned size. */
+    if (info->cipher.aesofb.aes->left != 0 || info->cipher.aesofb.sz == 0 ||
+        (info->cipher.aesofb.sz % WC_AES_BLOCK_SIZE) != 0) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+
+    /* Keystream is out XOR in; capture the last input block now in case out
+     * aliases in (in-place), then recover the keystream after the op. */
+    ctr = (byte*)info->cipher.aesofb.aes->reg;
+    XMEMCPY(lastIn, info->cipher.aesofb.in +
+        (info->cipher.aesofb.sz - WC_AES_BLOCK_SIZE), WC_AES_BLOCK_SIZE);
+
+    ret = wc_AsuCipherOneShot(info->cipher.aesofb.aes, info->cipher.aesofb.out,
+        info->cipher.aesofb.in, info->cipher.aesofb.sz, 1,
+        (u8)XASU_AES_OFB_MODE, ctr);
+    if (ret != 0) {
+        return ret;
+    }
+
+    /* Update aes->reg to the last keystream block (out XOR in) for a chained call. */
+    lastOut = info->cipher.aesofb.out + (info->cipher.aesofb.sz - WC_AES_BLOCK_SIZE);
+    for (i = 0; i < WC_AES_BLOCK_SIZE; i++) {
+        ctr[i] = (byte)(lastOut[i] ^ lastIn[i]);
+    }
+
+    return 0;
+}
+#endif /* WOLFSSL_AES_OFB */
+
 #ifdef HAVE_AESGCM
 /* AES-GCM via the ASU GCM mode (one-shot: key, IV, AAD and tag in one op).
  * Offloads aligned plaintext+AAD with a 128/256 key and 8..16 byte tag; declines
@@ -604,7 +652,8 @@ static int wc_AsuCipherCcm(wc_CryptoInfo* info)
 #endif /* HAVE_AESCCM */
 
 /* Single entry point for the cipher engine, reached through the crypto callback
- * dispatcher. Handles AES-CBC, AES-ECB, AES-CTR, AES-CFB, AES-GCM and AES-CCM. */
+ * dispatcher. Handles AES-CBC, AES-ECB, AES-CTR, AES-CFB, AES-OFB, AES-GCM and
+ * AES-CCM. */
 int wc_AsuCipher(wc_CryptoInfo* info)
 {
     if (info == NULL) {
@@ -630,6 +679,10 @@ int wc_AsuCipher(wc_CryptoInfo* info)
     #ifdef WOLFSSL_AES_CFB
         case WC_CIPHER_AES_CFB:
             return wc_AsuCipherCfb(info);
+    #endif
+    #ifdef WOLFSSL_AES_OFB
+        case WC_CIPHER_AES_OFB:
+            return wc_AsuCipherOfb(info);
     #endif
     #ifdef HAVE_AESGCM
         case WC_CIPHER_AES_GCM:
