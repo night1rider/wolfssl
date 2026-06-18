@@ -20,7 +20,7 @@
  */
 
 /* ASU symmetric cipher engine for the wolfSSL crypto callback: AES-CBC, ECB,
- * CTR, GCM and CCM offload. Each call is one atomic ASU operation; the raw key
+ * CTR, CFB, GCM and CCM offload. Each call is one atomic ASU operation; the raw key
  * (aes->devKey) and CBC chaining IV (aes->reg) live on the wolfSSL Aes context,
  * so no per-context state is kept here and no copy/free handlers are needed. The
  * ASU supports only 128 and 256 bit keys and whole 16 byte blocks; AES-192,
@@ -266,6 +266,55 @@ static int wc_AsuCipherCtr(wc_CryptoInfo* info)
     return 0;
 }
 #endif /* WOLFSSL_AES_COUNTER */
+
+#ifdef WOLFSSL_AES_CFB
+/* AES-CFB (128-bit feedback) via the ASU CFB engine. CFB's feedback register is
+ * the last ciphertext block, so the IV (aes->reg) update matches CBC; like CTR
+ * it is a stream mode, so decline leftover keystream or a non block-aligned size. */
+static int wc_AsuCipherCfb(wc_CryptoInfo* info)
+{
+    byte* ctr;
+    int   ret;
+    byte  lastBlock[WC_AES_BLOCK_SIZE];
+
+    if (info == NULL || info->cipher.aescfb.aes == NULL ||
+        info->cipher.aescfb.out == NULL || info->cipher.aescfb.in == NULL) {
+        return BAD_FUNC_ARG;
+    }
+    /* CFB streaming state lives in the Aes context; the ASU starts a fresh
+     * feedback block, so decline leftover keystream or a non block-aligned size. */
+    if (info->cipher.aescfb.aes->left != 0 || info->cipher.aescfb.sz == 0 ||
+        (info->cipher.aescfb.sz % WC_AES_BLOCK_SIZE) != 0) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+
+    /* Feedback IV is aes->reg. For decrypt the next IV is the last input block;
+     * capture it now in case out aliases in. */
+    ctr = (byte*)info->cipher.aescfb.aes->reg;
+    if (!info->cipher.enc) {
+        XMEMCPY(lastBlock, info->cipher.aescfb.in +
+            (info->cipher.aescfb.sz - WC_AES_BLOCK_SIZE), WC_AES_BLOCK_SIZE);
+    }
+
+    ret = wc_AsuCipherOneShot(info->cipher.aescfb.aes, info->cipher.aescfb.out,
+        info->cipher.aescfb.in, info->cipher.aescfb.sz, info->cipher.enc,
+        (u8)XASU_AES_CFB_MODE, ctr);
+    if (ret != 0) {
+        return ret;
+    }
+
+    /* Update aes->reg to the last ciphertext block for a chained call. */
+    if (info->cipher.enc) {
+        XMEMCPY(ctr, info->cipher.aescfb.out +
+            (info->cipher.aescfb.sz - WC_AES_BLOCK_SIZE), WC_AES_BLOCK_SIZE);
+    }
+    else {
+        XMEMCPY(ctr, lastBlock, WC_AES_BLOCK_SIZE);
+    }
+
+    return 0;
+}
+#endif /* WOLFSSL_AES_CFB */
 
 #ifdef HAVE_AESGCM
 /* AES-GCM via the ASU GCM mode (one-shot: key, IV, AAD and tag in one op).
@@ -555,7 +604,7 @@ static int wc_AsuCipherCcm(wc_CryptoInfo* info)
 #endif /* HAVE_AESCCM */
 
 /* Single entry point for the cipher engine, reached through the crypto callback
- * dispatcher. Handles AES-CBC, AES-ECB, AES-CTR, AES-GCM and AES-CCM. */
+ * dispatcher. Handles AES-CBC, AES-ECB, AES-CTR, AES-CFB, AES-GCM and AES-CCM. */
 int wc_AsuCipher(wc_CryptoInfo* info)
 {
     if (info == NULL) {
@@ -577,6 +626,10 @@ int wc_AsuCipher(wc_CryptoInfo* info)
     #ifdef WOLFSSL_AES_COUNTER
         case WC_CIPHER_AES_CTR:
             return wc_AsuCipherCtr(info);
+    #endif
+    #ifdef WOLFSSL_AES_CFB
+        case WC_CIPHER_AES_CFB:
+            return wc_AsuCipherCfb(info);
     #endif
     #ifdef HAVE_AESGCM
         case WC_CIPHER_AES_GCM:
