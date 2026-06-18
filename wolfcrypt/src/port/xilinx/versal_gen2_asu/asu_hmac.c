@@ -111,6 +111,10 @@ static int wc_AsuHmacSubmit(XAsu_ClientParams* params, void* ctx)
 {
     AsuHmacReq* req = (AsuHmacReq*)ctx;
 
+    if (params == NULL || req == NULL) {
+        return XST_FAILURE;
+    }
+
     return XAsu_HmacCompute(params, &req->params);
 }
 
@@ -119,6 +123,10 @@ static int wc_AsuHmacSubmit(XAsu_ClientParams* params, void* ctx)
 static int wc_AsuHmacResolve(int macType, u8* shaType, u8* shaMode,
     word32* hmacLen)
 {
+    if (shaType == NULL || shaMode == NULL || hmacLen == NULL) {
+        return BAD_FUNC_ARG;
+    }
+
     switch (macType) {
         case WC_HASH_TYPE_SHA256:
             *shaType = XASU_SHA2_TYPE;
@@ -163,6 +171,10 @@ static int wc_AsuHmacOneShot(u8 shaType, u8 shaMode, const byte* key,
 {
     AsuHmacReq req;
     word32 status;
+
+    if (key == NULL || mac == NULL || (msg == NULL && msgLen > 0)) {
+        return BAD_FUNC_ARG;
+    }
 
     XMEMSET(&req, 0, sizeof(req));
     req.params.ShaType        = shaType;
@@ -212,6 +224,10 @@ static int wc_AsuHmacCompute(wc_CryptoInfo* info)
     u8           shaMode = 0;
     word32       hmacLen = 0;
     int          ret;
+
+    if (info == NULL) {
+        return BAD_FUNC_ARG;
+    }
 
     hmac = info->hmac.hmac;
     if (hmac == NULL) {
@@ -292,6 +308,9 @@ static int wc_AsuHmacCopy(wc_CryptoInfo* info)
     AsuHmacKeep* dstKeep;
     int          ret;
 
+    if (info == NULL) {
+        return BAD_FUNC_ARG;
+    }
     if (info->copy.algo != WC_ALGO_TYPE_HMAC) {
         return CRYPTOCB_UNAVAILABLE;
     }
@@ -338,6 +357,9 @@ static int wc_AsuHmacFree(wc_CryptoInfo* info)
     Hmac*        hmac;
     AsuHmacKeep* keep;
 
+    if (info == NULL) {
+        return BAD_FUNC_ARG;
+    }
     if (info->free.algo != WC_ALGO_TYPE_HMAC) {
         return CRYPTOCB_UNAVAILABLE;
     }
