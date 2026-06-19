@@ -364,6 +364,17 @@ int wc_CmacFree(Cmac* cmac)
 {
     if (cmac == NULL)
         return BAD_FUNC_ARG;
+#ifdef WOLF_CRYPTO_CB
+    /* Let the device release any per-context state it hung off cmac->devCtx
+     * before the struct is zeroed (e.g. an offload context never finalized). */
+    #ifndef WOLF_CRYPTO_CB_FIND
+    if (cmac->devId != INVALID_DEVID)
+    #endif
+    {
+        (void)wc_CryptoCb_Free(cmac->devId, WC_ALGO_TYPE_CMAC, (int)cmac->type,
+            0, cmac);
+    }
+#endif
 #if defined(WOLFSSL_HASH_KEEP)
     /* TODO: msg is leaked if wc_CmacFinal() is not called
      * e.g. when multiple calls to wc_CmacUpdate() and one fails but
