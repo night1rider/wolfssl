@@ -27,7 +27,8 @@
  * wc_ecc_rs_raw_to_sig and verify converts the DER signature to raw with
  * wc_ecc_sig_to_rs (right-aligned to the curve width). Keys are marshalled
  * big-endian, fixed-width with mp_to_unsigned_bin_len. Verify returns its verdict
- * in the ASU additional status (fail-closed). NIST P-192/256/384/521 only.
+ * in the ASU additional status (fail-closed). NIST P-192/256/384/521 and
+ * Brainpool P-256/320/384/512 prime curves.
  *
  * Ed25519 sign/verify also route here: the ASU hashes the raw message internally,
  * so wolfSSL's message is passed through the digest parameter, the private seed and
@@ -102,8 +103,8 @@ static int wc_AsuEccSubmit(XAsu_ClientParams* params, void* ctx)
 }
 
 /* Map the wolfSSL curve id to an ASU CurveType and byte length, declining any
- * curve that is not a supported NIST prime curve so wolfSSL falls back to
- * software. The key's domain size must match the mapped length. */
+ * curve that is not a supported NIST or Brainpool prime curve so wolfSSL falls
+ * back to software. The key's domain size must match the mapped length. */
 static int wc_AsuEccCurve(ecc_key* key, u32* curveType, u32* keyLen)
 {
     u32 type;
@@ -137,6 +138,26 @@ static int wc_AsuEccCurve(ecc_key* key, u32* curveType, u32* keyLen)
         case ECC_SECP521R1:
             type = (u32)XASU_ECC_NIST_P521;
             len  = (u32)XASU_ECC_P521_SIZE_IN_BYTES;
+            break;
+#endif
+#ifdef HAVE_ECC_BRAINPOOL
+        /* Brainpool prime curves: standard ECDSA, same digest handling as the NIST
+         * curves (every width <= the 64-byte ASU digest cap, so no P-521 issue). */
+        case ECC_BRAINPOOLP256R1:
+            type = (u32)XASU_ECC_BRAINPOOL_P256;
+            len  = (u32)XASU_ECC_P256_SIZE_IN_BYTES;
+            break;
+        case ECC_BRAINPOOLP320R1:
+            type = (u32)XASU_ECC_BRAINPOOL_P320;
+            len  = (u32)XASU_ECC_P320_SIZE_IN_BYTES;
+            break;
+        case ECC_BRAINPOOLP384R1:
+            type = (u32)XASU_ECC_BRAINPOOL_P384;
+            len  = (u32)XASU_ECC_P384_SIZE_IN_BYTES;
+            break;
+        case ECC_BRAINPOOLP512R1:
+            type = (u32)XASU_ECC_BRAINPOOL_P512;
+            len  = (u32)XASU_ECC_P512_SIZE_IN_BYTES;
             break;
 #endif
         default:

@@ -23,8 +23,9 @@
  * verify callbacks route here; the ASU performs the elliptic-curve operation on
  * the supplied digest. Keys and r||s are marshalled big-endian, fixed-width into
  * the ASU structs, and the DER<->raw signature conversion uses wolfSSL helpers.
- * NIST P-192/256/384/521 only; other curves decline to software. Plain Ed25519 and
- * Ed448 sign/verify also route here (ASU hashes the message). See asu_ecc.c. */
+ * NIST P-192/256/384/521 and Brainpool P-256/320/384/512; other curves decline to
+ * software. Plain Ed25519 and Ed448 sign/verify also route here (ASU hashes the
+ * message). See asu_ecc.c. */
 
 #ifndef WOLFSSL_VERSAL_GEN2_ASU_ECC_H
 #define WOLFSSL_VERSAL_GEN2_ASU_ECC_H
