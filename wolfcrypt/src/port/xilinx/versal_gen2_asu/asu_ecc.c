@@ -52,6 +52,9 @@
 #ifdef HAVE_ED25519
 #include <wolfssl/wolfcrypt/ed25519.h>
 #endif
+#ifdef HAVE_ED448
+#include <wolfssl/wolfcrypt/ed448.h>
+#endif
 
 #include "xasu_ecc.h"
 #include "xasu_eccinfo.h"
@@ -592,6 +595,206 @@ out:
 
 #endif /* HAVE_ED25519 */
 
+#ifdef HAVE_ED448
+
+/* Full-hardware Ed448 sign. Mirrors the Ed25519 handler: the ASU hashes the raw
+ * message internally (SHAKE256), so wolfSSL's message goes through the digest
+ * parameter and the 57-byte private seed (the first half of key->k) through the key
+ * parameter; the ASU returns the standard 114-byte signature. Only plain Ed448 (no
+ * context, no prehash) maps to the ASU; anything else declines to software. */
+static int wc_AsuEd448Sign(wc_CryptoInfo* info)
+{
+    WC_DECLARE_VAR(req, AsuEccReq, 1, NULL);
+    ed448_key* key = info->pk.ed448sign.key;
+    byte*   msg = NULL;
+    word32  msgLen;
+    word32  status;
+    word32  addl = 0;
+    int     ret = 0;
+
+    if (key == NULL || info->pk.ed448sign.out == NULL ||
+        info->pk.ed448sign.outLen == NULL) {
+        return BAD_FUNC_ARG;
+    }
+    /* The ASU implements only plain Ed448; ctx/prehash or a context string defer to
+     * software. Ed448 is 0, stored in the byte type field. */
+    if (info->pk.ed448sign.type != (byte)Ed448 ||
+        info->pk.ed448sign.contextLen != 0) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+    /* Match software's precondition: signing needs both the private seed and the
+     * public key set. wolfSSL rejects a private-only key with BAD_FUNC_ARG, so
+     * decline rather than sign it on hardware. */
+    if (key->privKeySet == 0 || key->pubKeySet == 0) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+    if (*info->pk.ed448sign.outLen < ED448_SIG_SIZE) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+    msgLen = info->pk.ed448sign.inLen;
+    if (msgLen != 0 && info->pk.ed448sign.in == NULL) {
+        return BAD_FUNC_ARG;
+    }
+
+    WC_ALLOC_VAR_EX(req, AsuEccReq, 1, NULL, DYNAMIC_TYPE_TMP_BUFFER,
+        ret = MEMORY_E);
+    if (!WC_VAR_OK(req)) {
+        return ret;
+    }
+    XMEMSET(req, 0, sizeof(*req));
+
+    if (msgLen != 0) {
+        msg = (byte*)XMALLOC(msgLen, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        if (msg == NULL) {
+            ret = MEMORY_E;
+            goto out;
+        }
+        XMEMCPY(msg, info->pk.ed448sign.in, msgLen);
+    }
+    else {
+        msg = req->digest;
+    }
+
+    XMEMCPY(req->key, key->k, ED448_KEY_SIZE);
+
+    req->op                = WC_ASU_ECC_OP_SIGN;
+    req->params.CurveType  = (u32)XASU_ECC_NIST_ED448;
+    req->params.KeyLen     = (u32)ED448_KEY_SIZE;
+    req->params.DigestLen  = msgLen;
+    req->params.KeyAddr    = (u64)(UINTPTR)req->key;
+    req->params.DigestAddr = (u64)(UINTPTR)msg;
+    req->params.SignAddr   = (u64)(UINTPTR)req->sign;
+
+    WC_ASU_PRINTF("[ASU] ed448 sign msgLen=%u\r\n", (unsigned int)msgLen);
+
+    wc_AsuCacheFlush(req->key, ED448_KEY_SIZE);
+    if (msgLen != 0) {
+        wc_AsuCacheFlush(msg, msgLen);
+    }
+
+    status = wc_AsuTransact(wc_AsuEccSubmit, req, &addl);
+
+    wc_AsuCacheInvalidate(req->sign, ED448_SIG_SIZE);
+
+    WC_ASU_PRINTF("[ASU] ed448 sign st=%u\r\n", (unsigned int)status);
+
+    if (status != XST_SUCCESS) {
+        ret = CRYPTOCB_UNAVAILABLE;
+        goto out;
+    }
+    XMEMCPY(info->pk.ed448sign.out, req->sign, ED448_SIG_SIZE);
+    *info->pk.ed448sign.outLen = ED448_SIG_SIZE;
+    ret = 0;
+
+out:
+    if (msgLen != 0 && msg != NULL) {
+        XFREE(msg, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    }
+    WC_FREE_VAR_EX(req, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    return ret;
+}
+
+/* Full-hardware Ed448 verify. wolfSSL passes the 114-byte signature, the message,
+ * and the 57-byte compressed public key (key->p). The ASU public-key buffer is the
+ * curve point as 57 zero bytes (unused Qx) followed by the compressed key (Qy); the
+ * ASU hashes the message internally and returns its verdict in the additional
+ * status. *res is set to 1 only on a verified result (fail-closed otherwise). */
+static int wc_AsuEd448Verify(wc_CryptoInfo* info)
+{
+    WC_DECLARE_VAR(req, AsuEccReq, 1, NULL);
+    ed448_key* key = info->pk.ed448verify.key;
+    byte*   msg = NULL;
+    word32  msgLen;
+    word32  status;
+    word32  addl = 0;
+    int     ret = 0;
+
+    if (info->pk.ed448verify.res == NULL) {
+        return BAD_FUNC_ARG;
+    }
+    *info->pk.ed448verify.res = 0;
+
+    if (key == NULL || info->pk.ed448verify.sig == NULL) {
+        return BAD_FUNC_ARG;
+    }
+    if (info->pk.ed448verify.type != (byte)Ed448 ||
+        info->pk.ed448verify.contextLen != 0) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+    if (key->pubKeySet == 0) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+    if (info->pk.ed448verify.sigLen != ED448_SIG_SIZE) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+    msgLen = info->pk.ed448verify.msgLen;
+    if (msgLen != 0 && info->pk.ed448verify.msg == NULL) {
+        return BAD_FUNC_ARG;
+    }
+
+    WC_ALLOC_VAR_EX(req, AsuEccReq, 1, NULL, DYNAMIC_TYPE_TMP_BUFFER,
+        ret = MEMORY_E);
+    if (!WC_VAR_OK(req)) {
+        return ret;
+    }
+    XMEMSET(req, 0, sizeof(*req));
+
+    if (msgLen != 0) {
+        msg = (byte*)XMALLOC(msgLen, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        if (msg == NULL) {
+            ret = MEMORY_E;
+            goto out;
+        }
+        XMEMCPY(msg, info->pk.ed448verify.msg, msgLen);
+    }
+    else {
+        msg = req->digest;
+    }
+
+    /* Public-key buffer: leading zero Qx then the compressed key in the Qy half. */
+    XMEMCPY(req->key + ED448_PUB_KEY_SIZE, key->p, ED448_PUB_KEY_SIZE);
+    XMEMCPY(req->sign, info->pk.ed448verify.sig, ED448_SIG_SIZE);
+
+    req->op                = WC_ASU_ECC_OP_VERIFY;
+    req->params.CurveType  = (u32)XASU_ECC_NIST_ED448;
+    req->params.KeyLen     = (u32)ED448_KEY_SIZE;
+    req->params.DigestLen  = msgLen;
+    req->params.KeyAddr    = (u64)(UINTPTR)req->key;
+    req->params.DigestAddr = (u64)(UINTPTR)msg;
+    req->params.SignAddr   = (u64)(UINTPTR)req->sign;
+
+    WC_ASU_PRINTF("[ASU] ed448 verify msgLen=%u\r\n", (unsigned int)msgLen);
+
+    wc_AsuCacheFlush(req->key, 2U * ED448_KEY_SIZE);
+    wc_AsuCacheFlush(req->sign, ED448_SIG_SIZE);
+    if (msgLen != 0) {
+        wc_AsuCacheFlush(msg, msgLen);
+    }
+
+    status = wc_AsuTransact(wc_AsuEccSubmit, req, &addl);
+
+    WC_ASU_PRINTF("[ASU] ed448 verify st=%u addl=0x%x\r\n",
+        (unsigned int)status, (unsigned int)addl);
+
+    if (status == XST_SUCCESS &&
+        addl == (word32)XASU_ECC_SIGNATURE_VERIFIED) {
+        *info->pk.ed448verify.res = 1;
+        ret = 0;
+    }
+    else {
+        ret = CRYPTOCB_UNAVAILABLE;
+    }
+
+out:
+    if (msgLen != 0 && msg != NULL) {
+        XFREE(msg, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    }
+    WC_FREE_VAR_EX(req, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    return ret;
+}
+
+#endif /* HAVE_ED448 */
+
 /* WC_ALGO_TYPE_PK entry point for ECC: dispatch ECDSA sign and verify. Other ECC
  * operations and unsupported curves decline to software. */
 int wc_AsuEcc(wc_CryptoInfo* info)
@@ -613,6 +816,12 @@ int wc_AsuEcc(wc_CryptoInfo* info)
             return wc_AsuEd25519Sign(info);
         case WC_PK_TYPE_ED25519_VERIFY:
             return wc_AsuEd25519Verify(info);
+#endif
+#ifdef HAVE_ED448
+        case WC_PK_TYPE_ED448:
+            return wc_AsuEd448Sign(info);
+        case WC_PK_TYPE_ED448_VERIFY:
+            return wc_AsuEd448Verify(info);
 #endif
         default:
             return CRYPTOCB_UNAVAILABLE;
