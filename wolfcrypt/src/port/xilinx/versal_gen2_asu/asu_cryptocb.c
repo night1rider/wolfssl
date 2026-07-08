@@ -55,6 +55,9 @@
 #ifdef WOLFSSL_VERSAL_GEN2_ASU_ECDH
     #include <wolfssl/wolfcrypt/port/xilinx/versal_gen2_asu/asu_ecdh.h>
 #endif
+#ifdef WOLFSSL_VERSAL_GEN2_ASU_ECIES
+    #include <wolfssl/wolfcrypt/port/xilinx/versal_gen2_asu/asu_ecies.h>
+#endif
 
 #ifndef WOLF_CRYPTO_CB
     #error "WOLFSSL_VERSAL_GEN2_ASU requires WOLF_CRYPTO_CB"
@@ -157,7 +160,7 @@ static int wc_AsuCryptoDevCb(int devId, wc_CryptoInfo* info, void* ctx)
             ret = wc_AsuCmac(info);
         #endif
             break;
-        case WC_ALGO_TYPE_PK:     /* M3 asu_rsa, asu_ecc, asu_ecdh */
+        case WC_ALGO_TYPE_PK:     /* M3 asu_rsa, asu_ecc, asu_ecdh, asu_ecies */
         #ifdef WOLFSSL_VERSAL_GEN2_ASU_RSA
             ret = wc_AsuRsa(info);
         #endif
@@ -169,6 +172,11 @@ static int wc_AsuCryptoDevCb(int devId, wc_CryptoInfo* info, void* ctx)
         #ifdef WOLFSSL_VERSAL_GEN2_ASU_ECDH
             if (ret == WC_NO_ERR_TRACE(CRYPTOCB_UNAVAILABLE)) {
                 ret = wc_AsuEcdh(info);
+            }
+        #endif
+        #ifdef WOLFSSL_VERSAL_GEN2_ASU_ECIES
+            if (ret == WC_NO_ERR_TRACE(CRYPTOCB_UNAVAILABLE)) {
+                ret = wc_AsuEcies(info);
             }
         #endif
             break;
